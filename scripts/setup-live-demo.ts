@@ -43,6 +43,24 @@ const pair = (await pairResp.json()) as {
   instance_token: string;
 };
 
+// Simulamos un stack local con bridge reachable + gateway conectado + 5 agentes
+// (mismo shape que produce src/main/clawhub-client.js#probeLocalStack en
+// clawgents-desktop).
+const mockLocalStack = {
+  bridge_url: "http://localhost:3700",
+  reachable: true,
+  gateway_connected: true,
+  agent_count: 5,
+  agents: [
+    { id: "office-executive-v1", name: "Elena (Executive)", status: "ready", online: true },
+    { id: "office-outbound-v1", name: "Diego (Outbound)", status: "ready", online: true },
+    { id: "office-community-v1", name: "Sofía (Community)", status: "idle", online: true },
+    { id: "office-seo-v1", name: "Mateo (SEO)", status: "ready", online: true },
+    { id: "office-legal-v1", name: "Lucía (Legal)", status: "ready", online: false },
+  ],
+  probed_at: new Date().toISOString(),
+};
+
 const beats = 10;
 let lastStatus = 0;
 for (let i = 0; i < beats; i++) {
@@ -60,6 +78,7 @@ for (let i = 0; i < beats; i++) {
       ram_mb: 400 + Math.floor(Math.random() * 300),
       tokens_consumed_24h: i * 1200 + Math.floor(Math.random() * 500),
       last_error: i === 7 ? "Token quota warning at 80%" : null,
+      extras: { local_stack: mockLocalStack },
     }),
   });
   lastStatus = r.status;

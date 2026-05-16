@@ -88,6 +88,28 @@ export default async function InstanceDetailPage({
     where: { instanceId: instance.id },
   });
 
+  // Extraer local_stack del rawPayload del último heartbeat (puede no existir
+  // si la instancia es vieja o no pudo contactar su bridge local).
+  type LocalStackAgent = {
+    id: string | null;
+    name: string | null;
+    status: string | null;
+    online: boolean | null;
+  };
+  type LocalStack = {
+    bridge_url?: string;
+    reachable?: boolean;
+    gateway_connected?: boolean | null;
+    agent_count?: number | null;
+    agents?: LocalStackAgent[] | null;
+    probed_at?: string;
+  };
+  const rawPayload = lastBeat?.rawPayload as
+    | { extras?: { local_stack?: LocalStack } }
+    | null
+    | undefined;
+  const localStack = rawPayload?.extras?.local_stack ?? null;
+
   return (
     <main className="container-page min-h-screen py-8 sm:py-12 space-y-8">
       <AutoRefresh intervalMs={5_000} />
@@ -154,6 +176,137 @@ export default async function InstanceDetailPage({
           </div>
         </div>
       </div>
+
+      {/* Stack local — gateway + agentes que reporta el bridge del PC */}
+      <Card className="card-paper border-0 shadow-none p-0">
+        <CardHeader className="px-6 pt-6">
+          <CardTitle className="font-display text-xl">Stack local</CardTitle>
+          <CardDescription>
+            Estado del bridge + gateway + agentes en el PC del trabajador,
+            reportado en el último heartbeat.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="px-6 pb-6">
+          {!localStack ? (
+            <p className="text-sm text-muted-foreground py-2">
+              La instancia aún no reporta su stack local. Necesita actualizar
+              a una versión de clawgents-desktop que probe el bridge en cada
+              heartbeat.
+            </p>
+          ) : !localStack.reachable ? (
+            <div className="space-y-2">
+              <div className="flex items-center gap-2">
+                <span
+                  className="h-2 w-2 rounded-full shrink-0"
+                  style={{ backgroundColor: "#e07474" }}
+                />
+                <span className="text-sm font-medium">
+                  Bridge no responde
+                </span>
+              </div>
+              <p className="text-xs text-muted-foreground">
+                URL sondeada:{" "}
+                <code className="text-xs">
+                  {localStack.bridge_url ?? "(no disponible)"}
+                </code>
+                . El proceso desktop está vivo pero su bridge embebido o
+                attached no contesta.
+              </p>
+            </div>
+          ) : (
+            <div className="space-y-5">
+              <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+                <div className="space-y-1">
+                  <div className="eyebrow text-[10px]">Bridge</div>
+                  <div className="flex items-center gap-1.5">
+                    <span
+                      className="h-2 w-2 rounded-full"
+                      style={{ backgroundColor: "var(--brand)" }}
+                    />
+                    <span className="text-sm font-medium">reachable</span>
+                  </div>
+                  {localStack.bridge_url && (
+                    <code className="text-xs text-muted-foreground">
+                      {localStack.bridge_url}
+                    </code>
+                  )}
+                </div>
+                <div className="space-y-1">
+                  <div className="eyebrow text-[10px]">Gateway WS</div>
+                  <div className="flex items-center gap-1.5">
+                    <span
+                      className="h-2 w-2 rounded-full"
+                      style={{
+                        backgroundColor:
+                          localStack.gateway_connected === true
+                            ? "var(--brand)"
+                            : localStack.gateway_connected === false
+                              ? "#e07474"
+                              : "#bbb",
+                      }}
+                    />
+                    <span className="text-sm font-medium">
+                      {localStack.gateway_connected === true
+                        ? "conectado"
+                        : localStack.gateway_connected === false
+                          ? "desconectado"
+                          : "desconocido"}
+                    </span>
+                  </div>
+                </div>
+                <div className="space-y-1">
+                  <div className="eyebrow text-[10px]">Agentes</div>
+                  <div className="text-lg font-semibold tabular-nums">
+                    {localStack.agent_count ?? "—"}
+                  </div>
+                </div>
+              </div>
+
+              {Array.isArray(localStack.agents) &&
+              localStack.agents.length > 0 ? (
+                <div className="space-y-2">
+                  <div className="eyebrow text-[10px]">Lista</div>
+                  <div className="flex flex-wrap gap-2">
+                    {localStack.agents.map((a, idx) => (
+                      <div
+                        key={(a.id ?? "agent-") + idx}
+                        className="card-quiet px-3 py-1.5 flex items-center gap-2"
+                      >
+                        <span
+                          className="h-1.5 w-1.5 rounded-full"
+                          style={{
+                            backgroundColor:
+                              a.online === true
+                                ? "var(--brand)"
+                                : a.online === false
+                                  ? "#e07474"
+                                  : "#bbb",
+                          }}
+                        />
+                        <span className="text-sm font-medium">
+                          {a.name ?? a.id ?? "agente"}
+                        </span>
+                        {a.id && a.name && a.id !== a.name && (
+                          <code className="text-[10px] text-muted-foreground">
+                            {a.id}
+                          </code>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              ) : null}
+
+              {localStack.probed_at && (
+                <p className="text-xs text-muted-foreground">
+                  Sondeado:{" "}
+                  {new Date(localStack.probed_at).toLocaleString("es-ES")}
+                </p>
+              )}
+            </div>
+          )}
+        </CardContent>
+      </Card>
 
       <Card className="card-paper border-0 shadow-none p-0">
         <CardHeader className="px-6 pt-6">
