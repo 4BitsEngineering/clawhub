@@ -1,0 +1,147 @@
+// clawhub — Prisma schema
+// See SPEC.md § 2 Domain model
+
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+  // url se configura en prisma.config.ts (Prisma 7 breaking change)
+}
+
+// ============================================
+// Auth.js (NextAuth v5) — required by Prisma adapter
+// ============================================
+
+model User {
+  id            String    @id @default(cuid())
+  email         String    @unique
+  emailVerified DateTime?
+  name          String?
+  image         String?
+  role          UserRole  @default(FIRM_ADMIN)
+  firmId        String?
+  firm          Firm?     @relation(fields: [firmId], references: [id], onDelete: SetNull)
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  accounts Account[]
+  sessions Session[]
+
+  @@index([firmId])
+}
+
+model Account {
+  id                String  @id @default(cuid())
+  userId            String
+  type              String
+  provider          String
+  providerAccountId String
+  refresh_token     String?
+  access_token      String?
+  expires_at        Int?
+  token_type        String?
+  scope             String?
+  id_token          String?
+  session_state     String?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, providerAccountId])
+}
+
+model Session {
+  id           String   @id @default(cuid())
+  sessionToken String   @unique
+  userId       String
+  expires      DateTime
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model VerificationToken {
+  identifier String
+  token      String   @unique
+  expires    DateTime
+
+  @@unique([identifier, token])
+}
+
+enum UserRole {
+  OPERATOR
+  FIRM_ADMIN
+}
+
+// ============================================
+// clawhub domain
+// ============================================
+
+model Firm {
+  id             String   @id @default(uuid())
+  name           String
+  plan           FirmPlan @default(STARTER)
+  seatsPurchased Int      @default(5)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  users         User[]
+  instances     Instance[]
+  pairingTokens PairingToken[]
+}
+
+enum FirmPlan {
+  STARTER
+  PRO
+  BUSINESS
+  ENTERPRISE
+}
+
+model Instance {
+  id                String    @id @default(uuid())
+  // Hashed instance token (SHA-256). Original is high-entropy, no bcrypt needed.
+  instanceTokenHash String    @unique
+  firmId            String
+  firm              Firm      @relation(fields: [firmId], references: [id], onDelete: Cascade)
+  workerLabel       String
+  version           String
+  os                String?
+  lastHeartbeatAt   DateTime?
+  createdAt         DateTime  @default(now())
+
+  heartbeats Heartbeat[]
+
+  @@index([firmId])
+  @@index([lastHeartbeatAt])
+}
+
+model Heartbeat {
+  id                String   @id @default(uuid())
+  instanceId        String
+  instance          Instance @relation(fields: [instanceId], references: [id], onDelete: Cascade)
+  receivedAt        DateTime @default(now())
+  cpuPct            Float?
+  ramMb             Int?
+  tokensConsumed24h Int?
+  uptimeS           Int?
+  lastError         String?
+  // Raw heartbeat payload for forward-compat
+  rawPayload        Json
+
+  @@index([instanceId, receivedAt])
+}
+
+model PairingToken {
+  id        String    @id @default(uuid())
+  firmId    String
+  firm      Firm      @relation(fields: [firmId], references: [id], onDelete: Cascade)
+  // Human-readable code shown to firm admin during pairing flow
+  code      String    @unique
+  expiresAt DateTime
+  usedAt    DateTime?
+  createdAt DateTime  @default(now())
+
+  @@index([firmId])
+  @@index([code])
+}
