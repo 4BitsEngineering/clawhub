@@ -163,8 +163,9 @@ async function probeLocalStack() {
     }
   };
 
+  // /api/health en el bridge de autonomous-agents (no /healthz).
   const [health, agentsResp] = await Promise.all([
-    probe('/healthz'),
+    probe('/api/health'),
     probe('/api/gateway/agents'),
   ]);
 
