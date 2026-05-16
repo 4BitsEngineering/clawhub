@@ -89,6 +89,7 @@ model Firm {
   users         User[]
   instances     Instance[]
   pairingTokens PairingToken[]
+  skills        Skill[]
 }
 
 enum FirmPlan {
@@ -144,4 +145,33 @@ model PairingToken {
 
   @@index([firmId])
   @@index([code])
+}
+
+/**
+ * Skill / SOP / plantilla — Tier Firma del modelo de conocimiento.
+ *
+ * Gestionado por operator o firm_admin desde clawhub. Se distribuye a todas
+ * las instancias de la firma vía /api/v0/skills (versionado). Cuando una
+ * instancia detecta version > local, descarga el contenido y notifica al
+ * runtime de OpenClaw local para que lo cargue.
+ *
+ * version se incrementa en cada publish; active permite ocultar sin borrar.
+ */
+model Skill {
+  id          String    @id @default(uuid())
+  firmId      String
+  firm        Firm      @relation(fields: [firmId], references: [id], onDelete: Cascade)
+  slug        String    // identificador estable, scope firma (e.g. "tono-comunicacion")
+  title       String    // nombre para humanos
+  description String?   // 1-2 líneas de resumen
+  content     String    // cuerpo markdown
+  version     Int       @default(1)
+  active      Boolean   @default(true)
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  publishedAt DateTime?
+
+  @@unique([firmId, slug])
+  @@index([firmId])
+  @@index([firmId, active])
 }

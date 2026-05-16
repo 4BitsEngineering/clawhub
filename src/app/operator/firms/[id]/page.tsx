@@ -116,6 +116,12 @@ export default async function OperatorFirmDetailPage({
             {firm.plan}
           </Badge>
           <Link
+            href={`/operator/firms/${firm.id}/skills`}
+            className={buttonVariants({ variant: "outline", size: "sm" })}
+          >
+            Skills
+          </Link>
+          <Link
             href={`/operator/firms/${firm.id}/edit`}
             className={buttonVariants({ variant: "outline", size: "sm" })}
           >
