@@ -3,7 +3,9 @@ import { notFound } from "next/navigation";
 import { revalidatePath } from "next/cache";
 import { db } from "@/lib/db";
 import { AutoRefresh } from "@/components/auto-refresh";
-import { Button } from "@/components/ui/button";
+import { Button, buttonVariants } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import {
   Card,
   CardContent,
@@ -66,6 +68,22 @@ export default async function OperatorFirmDetailPage({
     revalidatePath(`/operator/firms/${id}`);
   }
 
+  async function addFirmAdminAction(formData: FormData) {
+    "use server";
+    const email = ((formData.get("email") as string) ?? "").trim().toLowerCase();
+    const name = ((formData.get("name") as string) ?? "").trim() || null;
+
+    if (!email || !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) return;
+
+    await db.user.upsert({
+      where: { email },
+      update: { role: "FIRM_ADMIN", firmId: id, name },
+      create: { email, name, role: "FIRM_ADMIN", firmId: id },
+    });
+
+    revalidatePath(`/operator/firms/${id}`);
+  }
+
   const onlineCount = firm.instances.filter(
     (i) =>
       i.lastHeartbeatAt &&
@@ -93,9 +111,17 @@ export default async function OperatorFirmDetailPage({
             <code className="text-xs">{firm.id}</code>
           </p>
         </div>
-        <Badge variant="secondary" className="text-sm">
-          {firm.plan}
-        </Badge>
+        <div className="flex items-center gap-3">
+          <Badge variant="secondary" className="text-sm">
+            {firm.plan}
+          </Badge>
+          <Link
+            href={`/operator/firms/${firm.id}/edit`}
+            className={buttonVariants({ variant: "outline", size: "sm" })}
+          >
+            Editar
+          </Link>
+        </div>
       </header>
 
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
@@ -245,10 +271,36 @@ export default async function OperatorFirmDetailPage({
             /firm cuando reactivemos el login.
           </CardDescription>
         </CardHeader>
-        <CardContent>
+        <CardContent className="space-y-6">
+          <form
+            action={addFirmAdminAction}
+            className="flex flex-col sm:flex-row gap-3 sm:items-end"
+          >
+            <div className="space-y-2 flex-1">
+              <Label htmlFor="admin-email" className="text-xs">Email</Label>
+              <Input
+                id="admin-email"
+                name="email"
+                type="email"
+                required
+                placeholder="admin@firma.com"
+              />
+            </div>
+            <div className="space-y-2 flex-1">
+              <Label htmlFor="admin-name" className="text-xs">Nombre (opcional)</Label>
+              <Input
+                id="admin-name"
+                name="name"
+                maxLength={120}
+                placeholder="Nombre del admin"
+              />
+            </div>
+            <Button type="submit">+ Añadir admin</Button>
+          </form>
+
           {firm.users.length === 0 ? (
             <p className="text-sm text-muted-foreground">
-              Sin admins. TODO: añadir formulario para invitar firm_admin.
+              Sin admins todavía. Añade uno arriba.
             </p>
           ) : (
             <Table>
