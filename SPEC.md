@@ -219,23 +219,23 @@ Total: **7 pantallas funcionales**. Cero polish.
 
 | Componente | Elección | Razón |
 |---|---|---|
-| Framework | Next.js 15 App Router | Consistente con configurator y resto del front |
+| Framework | Next.js 16 App Router (Turbopack) | Última estable; ojo: rompe con Next 15 en algunas APIs (ver `AGENTS.md`) |
 | Lenguaje | TypeScript strict | Seguridad del modelo de dominio |
-| DB | PostgreSQL | Robusta, jsonb para extras forward-compat |
-| ORM | **Prisma** (decidir vs Drizzle) | Maduro, schema declarativo, migrations |
-| Auth | NextAuth.js + Email provider (magic link) | Cero password, suficiente v0 |
-| UI | shadcn/ui + Tailwind | Estética seria sin diseño desde cero |
+| DB | PostgreSQL (Supabase) | Robusta, jsonb para extras forward-compat |
+| ORM | **Prisma** | Maduro, schema declarativo, migrations |
+| Auth | Auth.js v5 (NextAuth) + Resend (magic link) | Cero password, suficiente v0 |
+| UI | shadcn/ui + Tailwind v4 | Estética seria sin diseño desde cero |
 | Hosting app | Vercel | Deploy 1-click, alineado con Next.js |
-| Hosting DB | **Supabase / Neon / Railway** (pendiente decidir) | Postgres managed económico |
+| Hosting DB | **Supabase** (decidido) | Free tier 500MB + tooling rico (auth, realtime para v0.5+) |
 | Email | Resend (magic link) | Simple, gratis bajo cuotas |
 | Tests | Vitest | Ligero |
 | Lint/format | ESLint + Prettier | Estándar |
 
-### Open decisions de stack
+### Open decisions de stack (resueltas)
 
-- [ ] **Prisma vs Drizzle**. Prisma más maduro y conocido; Drizzle más cercano a SQL puro y mejor edge.
-- [ ] **Postgres host**: Supabase (más features), Neon (mejor branching), Railway (más barato low scale).
-- [ ] **Multi-tenant strategy**: ¿`firm_id` en cada tabla (column-based) o schemas separados por tenant? V0 column-based es suficiente.
+- [x] **Prisma vs Drizzle**: ✅ Prisma.
+- [x] **Postgres host**: ✅ Supabase.
+- [x] **Multi-tenant strategy**: ✅ column-based (`firm_id` en cada tabla relevante). V0 suficiente.
 - [ ] **Secrets management**: Vercel env vars suficientes v0, considerar Doppler/Infisical después.
 
 ---
