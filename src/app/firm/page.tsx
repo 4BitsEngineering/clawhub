@@ -1,5 +1,9 @@
+import Link from "next/link";
 import { revalidatePath } from "next/cache";
 import { db } from "@/lib/db";
+
+export const dynamic = "force-dynamic";
+
 import {
   Card,
   CardContent,
@@ -17,6 +21,7 @@ import {
 } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { AutoRefresh } from "@/components/auto-refresh";
 
 const DEMO_FIRM_ID = "00000000-0000-0000-0000-000000000001";
 
@@ -78,6 +83,7 @@ export default async function FirmPage({
 
   return (
     <main className="min-h-screen p-8 max-w-6xl mx-auto space-y-6">
+      <AutoRefresh intervalMs={5_000} />
       <header className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-semibold tracking-tight">
@@ -171,7 +177,12 @@ export default async function FirmPage({
                   return (
                     <TableRow key={i.id}>
                       <TableCell className="font-medium">
-                        {i.workerLabel}
+                        <Link
+                          href={`/firm/instances/${i.id}`}
+                          className="hover:underline"
+                        >
+                          {i.workerLabel}
+                        </Link>
                       </TableCell>
                       <TableCell>
                         <Badge variant={isOnline ? "default" : "secondary"}>

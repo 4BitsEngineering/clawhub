@@ -1,5 +1,9 @@
 // TODO: re-añadir imports de auth (redirect, auth, SignOutButton) cuando reactivemos login.
 import { db } from "@/lib/db";
+import { AutoRefresh } from "@/components/auto-refresh";
+
+export const dynamic = "force-dynamic";
+
 import {
   Card,
   CardContent,
@@ -34,6 +38,7 @@ export default async function OperatorPage() {
 
   return (
     <main className="min-h-screen p-8 max-w-6xl mx-auto">
+      <AutoRefresh intervalMs={10_000} />
       <header className="flex items-center justify-between mb-8">
         <div>
           <h1 className="text-2xl font-semibold tracking-tight">
