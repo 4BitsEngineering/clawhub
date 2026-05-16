@@ -13,7 +13,7 @@ async function main() {
     data: {
       firmId: "00000000-0000-0000-0000-000000000001",
       code,
-      expiresAt: new Date(Date.now() + 5 * 60_000),
+      expiresAt: new Date(Date.now() + 30 * 60_000),
     },
   });
   console.log(t.code);
