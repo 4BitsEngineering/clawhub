@@ -1,7 +1,9 @@
 import Link from "next/link";
-import { notFound } from "next/navigation";
+import { notFound, redirect } from "next/navigation";
+import { revalidatePath } from "next/cache";
 import { db } from "@/lib/db";
 import { AutoRefresh } from "@/components/auto-refresh";
+import { Button } from "@/components/ui/button";
 import {
   Card,
   CardContent,
@@ -58,6 +60,14 @@ export default async function InstanceDetailPage({
 
   if (!instance) notFound();
 
+  async function unpairInstanceAction() {
+    "use server";
+    await db.instance.delete({ where: { id } });
+    revalidatePath("/firm");
+    revalidatePath(`/operator/firms/${instance!.firmId}`);
+    redirect("/firm");
+  }
+
   const isOnline =
     instance.lastHeartbeatAt &&
     Date.now() - instance.lastHeartbeatAt.getTime() < 3 * 60 * 1000;
@@ -89,9 +99,16 @@ export default async function InstanceDetailPage({
             instance_id <code className="text-xs">{instance.id}</code>
           </p>
         </div>
-        <Badge variant={isOnline ? "default" : "secondary"} className="text-base px-3 py-1">
-          {isOnline ? "online" : "offline"}
-        </Badge>
+        <div className="flex items-center gap-3">
+          <Badge variant={isOnline ? "default" : "secondary"} className="text-base px-3 py-1">
+            {isOnline ? "online" : "offline"}
+          </Badge>
+          <form action={unpairInstanceAction}>
+            <Button type="submit" variant="destructive" size="sm">
+              Despareja
+            </Button>
+          </form>
+        </div>
       </header>
 
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
