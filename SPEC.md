@@ -223,7 +223,7 @@ Total: **7 pantallas funcionales**. Cero polish.
 | Lenguaje | TypeScript strict | Seguridad del modelo de dominio |
 | DB | PostgreSQL (Supabase) | Robusta, jsonb para extras forward-compat |
 | ORM | **Prisma** | Maduro, schema declarativo, migrations |
-| Auth | Auth.js v5 (NextAuth) + Resend (magic link) | Cero password, suficiente v0 |
+| Auth | Auth.js v5 (NextAuth) + magic link | Dev: log al stdout. Prod: proveedor por decidir (Resend/SES/SMTP) |
 | UI | shadcn/ui + Tailwind v4 | Estética seria sin diseño desde cero |
 | Hosting app | Vercel | Deploy 1-click, alineado con Next.js |
 | Hosting DB | **Supabase** (decidido) | Free tier 500MB + tooling rico (auth, realtime para v0.5+) |

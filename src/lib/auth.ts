@@ -1,5 +1,5 @@
 import NextAuth from "next-auth";
-import Resend from "next-auth/providers/resend";
+import Nodemailer from "next-auth/providers/nodemailer";
 import { PrismaAdapter } from "@auth/prisma-adapter";
 import { db } from "@/lib/db";
 
@@ -20,9 +20,27 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
   adapter: PrismaAdapter(db),
   session: { strategy: "database" },
   providers: [
-    Resend({
-      apiKey: process.env.AUTH_RESEND_KEY,
-      from: process.env.AUTH_RESEND_FROM ?? "noreply@clawhub.local",
+    // Dev mode: Nodemailer transport is configured but never used.
+    // sendVerificationRequest is overridden to log the magic link to stdout.
+    // Swap this for a real email provider (Resend, SES, SMTP) when going to prod.
+    Nodemailer({
+      server: {
+        host: "localhost",
+        port: 1025,
+        auth: { user: "", pass: "" },
+      },
+      from: "dev@clawhub.local",
+      async sendVerificationRequest({ identifier, url }) {
+        const banner = "═".repeat(72);
+        // eslint-disable-next-line no-console
+        console.log(
+          `\n${banner}\n` +
+            `🔐  clawhub · magic link\n` +
+            `    para: ${identifier}\n` +
+            `    abre: ${url}\n` +
+            `${banner}\n`,
+        );
+      },
     }),
   ],
   pages: {
@@ -32,9 +50,9 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
     session({ session, user }) {
       if (session.user) {
         session.user.id = user.id;
-        // @ts-expect-error — role / firmId come from User table
+        // @ts-expect-error — role comes from User table (Prisma type)
         session.user.role = user.role;
-        // @ts-expect-error
+        // @ts-expect-error — firmId comes from User table (Prisma type)
         session.user.firmId = user.firmId;
       }
       return session;
