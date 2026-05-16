@@ -1,7 +1,5 @@
-import { redirect } from "next/navigation";
-import { auth } from "@/lib/auth";
+// TODO: re-añadir imports de auth (redirect, auth, SignOutButton) cuando reactivemos login.
 import { db } from "@/lib/db";
-import { SignOutButton } from "@/components/sign-out-button";
 import {
   Card,
   CardContent,
@@ -20,9 +18,10 @@ import {
 import { Badge } from "@/components/ui/badge";
 
 export default async function OperatorPage() {
-  const session = await auth();
-  if (!session?.user) redirect("/login");
-  if (session.user.role !== "OPERATOR") redirect("/firm");
+  // TODO: re-enable auth check cuando podamos probar login.
+  // const session = await auth();
+  // if (!session?.user) redirect("/login");
+  // if (session.user.role !== "OPERATOR") redirect("/firm");
 
   const firms = await db.firm.findMany({
     orderBy: { createdAt: "desc" },
@@ -41,10 +40,9 @@ export default async function OperatorPage() {
             clawhub · operator
           </h1>
           <p className="text-sm text-muted-foreground">
-            Logueado como {session.user.email}
+            Vista dev sin login · TODO restaurar auth check
           </p>
         </div>
-        <SignOutButton />
       </header>
 
       <Card>

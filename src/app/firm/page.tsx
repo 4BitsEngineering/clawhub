@@ -1,7 +1,5 @@
-import { redirect } from "next/navigation";
-import { auth } from "@/lib/auth";
+import { revalidatePath } from "next/cache";
 import { db } from "@/lib/db";
-import { SignOutButton } from "@/components/sign-out-button";
 import {
   Card,
   CardContent,
@@ -18,44 +16,127 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 
-export default async function FirmPage() {
-  const session = await auth();
-  if (!session?.user) redirect("/login");
-  if (session.user.role !== "FIRM_ADMIN") redirect("/operator");
-  if (!session.user.firmId) {
-    return (
-      <main className="min-h-screen p-8 max-w-3xl mx-auto">
-        <p>Tu usuario no está asociado a ninguna firma. Contacta con soporte.</p>
-      </main>
-    );
+const DEMO_FIRM_ID = "00000000-0000-0000-0000-000000000001";
+
+// Genera un pairing code humano-friendly (8 chars, sin caracteres confusos).
+function generatePairingCode(): string {
+  const alphabet = "ABCDEFGHJKMNPQRSTUVWXYZ23456789"; // sin 0/O/1/I/L
+  let code = "";
+  for (let i = 0; i < 8; i++) {
+    code += alphabet[Math.floor(Math.random() * alphabet.length)];
+    if (i === 3) code += "-";
   }
+  return code;
+}
+
+async function generatePairingTokenAction() {
+  "use server";
+  const code = generatePairingCode();
+  await db.pairingToken.create({
+    data: {
+      firmId: DEMO_FIRM_ID,
+      code,
+      expiresAt: new Date(Date.now() + 10 * 60 * 1000), // 10 min
+    },
+  });
+  revalidatePath("/firm");
+}
+
+export default async function FirmPage({
+  searchParams,
+}: {
+  searchParams: Promise<Record<string, string | string[] | undefined>>;
+}) {
+  // TODO: re-enable auth (session + role + firmId). Por ahora hardcoded a demo firm.
+  await searchParams;
 
   const firm = await db.firm.findUnique({
-    where: { id: session.user.firmId },
+    where: { id: DEMO_FIRM_ID },
     include: {
       instances: {
+        orderBy: { createdAt: "desc" },
+      },
+      pairingTokens: {
+        where: {
+          usedAt: null,
+          expiresAt: { gt: new Date() },
+        },
         orderBy: { createdAt: "desc" },
       },
     },
   });
 
-  if (!firm) redirect("/login");
+  if (!firm) {
+    return (
+      <main className="min-h-screen p-8 max-w-3xl mx-auto">
+        <p>Firma demo no encontrada. ¿Has corrido el seed?</p>
+      </main>
+    );
+  }
 
   return (
-    <main className="min-h-screen p-8 max-w-6xl mx-auto">
-      <header className="flex items-center justify-between mb-8">
+    <main className="min-h-screen p-8 max-w-6xl mx-auto space-y-6">
+      <header className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-semibold tracking-tight">
             {firm.name}
           </h1>
           <p className="text-sm text-muted-foreground">
             Plan {firm.plan} · {firm.instances.length}/{firm.seatsPurchased}{" "}
-            instancias
+            instancias · vista dev sin login
           </p>
         </div>
-        <SignOutButton />
+        <form action={generatePairingTokenAction}>
+          <Button type="submit">+ Añadir trabajador</Button>
+        </form>
       </header>
+
+      {firm.pairingTokens.length > 0 && (
+        <Card>
+          <CardHeader>
+            <CardTitle>Pairing codes activos</CardTitle>
+            <CardDescription>
+              Pasa el código al trabajador. Caduca 10 min después de generarse.
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Código</TableHead>
+                  <TableHead>Caduca</TableHead>
+                  <TableHead>Creado</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {firm.pairingTokens.map((t) => {
+                  const minsLeft = Math.max(
+                    0,
+                    Math.round(
+                      (t.expiresAt.getTime() - Date.now()) / 60000,
+                    ),
+                  );
+                  return (
+                    <TableRow key={t.id}>
+                      <TableCell className="font-mono text-base font-medium tracking-wider">
+                        {t.code}
+                      </TableCell>
+                      <TableCell className="text-muted-foreground">
+                        en {minsLeft} min
+                      </TableCell>
+                      <TableCell className="text-muted-foreground">
+                        {t.createdAt.toLocaleTimeString("es-ES")}
+                      </TableCell>
+                    </TableRow>
+                  );
+                })}
+              </TableBody>
+            </Table>
+          </CardContent>
+        </Card>
+      )}
 
       <Card>
         <CardHeader>
