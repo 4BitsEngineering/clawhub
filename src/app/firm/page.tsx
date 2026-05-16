@@ -24,6 +24,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { AutoRefresh } from "@/components/auto-refresh";
 import { SignOutButton } from "@/components/sign-out-button";
+import { ThemeToggle } from "@/components/theme-toggle";
 
 // Genera un pairing code humano-friendly (8 chars, sin caracteres confusos).
 function generatePairingCode(): string {
@@ -114,6 +115,7 @@ export default async function FirmPage() {
               + Añadir trabajador
             </Button>
           </form>
+          <ThemeToggle />
           <SignOutButton />
         </div>
       </header>

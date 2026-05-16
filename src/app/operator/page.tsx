@@ -3,6 +3,7 @@ import { db } from "@/lib/db";
 import { requireOperator } from "@/lib/session";
 import { AutoRefresh } from "@/components/auto-refresh";
 import { SignOutButton } from "@/components/sign-out-button";
+import { ThemeToggle } from "@/components/theme-toggle";
 import {
   Card,
   CardContent,
@@ -60,6 +61,7 @@ export default async function OperatorPage() {
           >
             + Nueva firma
           </Link>
+          <ThemeToggle />
           <SignOutButton />
         </div>
       </header>

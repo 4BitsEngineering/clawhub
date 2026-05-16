@@ -2,6 +2,7 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { getSession } from "@/lib/session";
 import { buttonVariants } from "@/components/ui/button";
+import { ThemeToggle } from "@/components/theme-toggle";
 
 export default async function HomePage() {
   const session = await getSession();
@@ -16,6 +17,10 @@ export default async function HomePage() {
         aria-hidden
         className="spotlight pointer-events-none absolute inset-x-0 top-0 h-[700px]"
       />
+
+      <div className="absolute top-4 right-4 z-10">
+        <ThemeToggle />
+      </div>
 
       <div className="container-page relative space-y-24 py-16 sm:py-20 lg:py-28">
         {/* Hero */}

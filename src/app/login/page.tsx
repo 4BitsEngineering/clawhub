@@ -3,6 +3,7 @@ import { cookies } from "next/headers";
 import { signIn } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { DEV_COOKIE } from "@/lib/session";
+import { ThemeToggle } from "@/components/theme-toggle";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -59,6 +60,9 @@ export default async function LoginPage({
         aria-hidden
         className="spotlight pointer-events-none absolute inset-x-0 top-0 h-[500px]"
       />
+      <div className="absolute top-4 right-4 z-10">
+        <ThemeToggle />
+      </div>
       <Card className="card-paper border-0 shadow-none w-full max-w-md relative">
         <CardHeader className="space-y-3">
           <div className="eyebrow-chip self-start">clawhub · acceso</div>
