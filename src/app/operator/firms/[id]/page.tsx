@@ -93,7 +93,7 @@ export default async function OperatorFirmDetailPage({
   ).length;
 
   return (
-    <main className="min-h-screen p-8 max-w-6xl mx-auto space-y-6">
+    <main className="container-page min-h-screen py-8 sm:py-12 space-y-8">
       <AutoRefresh intervalMs={10_000} />
 
       <div className="text-sm">
@@ -101,19 +101,22 @@ export default async function OperatorFirmDetailPage({
           href="/operator"
           className="text-muted-foreground hover:text-foreground"
         >
-          ← operator
+          ← clawhub
         </Link>
       </div>
 
-      <header className="flex items-start justify-between gap-4">
-        <div>
-          <h1 className="text-2xl font-semibold tracking-tight">{firm.name}</h1>
+      <header className="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-4">
+        <div className="space-y-2">
+          <div className="eyebrow-chip">tenant</div>
+          <h1 className="font-display text-3xl sm:text-4xl font-semibold tracking-tight">
+            {firm.name}
+          </h1>
           <p className="text-sm text-muted-foreground">
-            Creada {firm.createdAt.toLocaleDateString("es-ES")} · firm_id{" "}
+            Creada {firm.createdAt.toLocaleDateString("es-ES")} ·{" "}
             <code className="text-xs">{firm.id}</code>
           </p>
         </div>
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-2 self-start sm:self-auto">
           <Badge variant="secondary" className="text-sm">
             {firm.plan}
           </Badge>

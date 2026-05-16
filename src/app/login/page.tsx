@@ -54,13 +54,20 @@ export default async function LoginPage({
   const devEnabled = process.env.DEV_AUTH_ENABLED === "true";
 
   return (
-    <main className="min-h-screen flex items-center justify-center p-8">
-      <Card className="w-full max-w-md">
-        <CardHeader>
-          <CardTitle>Acceder a clawhub</CardTitle>
+    <main className="relative min-h-screen flex items-center justify-center p-6">
+      <div
+        aria-hidden
+        className="spotlight pointer-events-none absolute inset-x-0 top-0 h-[500px]"
+      />
+      <Card className="card-paper border-0 shadow-none w-full max-w-md relative">
+        <CardHeader className="space-y-3">
+          <div className="eyebrow-chip self-start">clawhub · acceso</div>
+          <CardTitle className="font-display text-2xl">
+            Entrar al panel
+          </CardTitle>
           <CardDescription>
-            Introduce tu email. Te enviaremos un magic link (en dev se imprime
-            en la consola del server).
+            Introduce tu email — te enviaremos un magic link. En dev se
+            imprime al stdout del server.
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-6">
@@ -85,7 +92,14 @@ export default async function LoginPage({
                   placeholder="tu@email.com"
                 />
               </div>
-              <Button type="submit" className="w-full">
+              <Button
+                type="submit"
+                className="w-full"
+                style={{
+                  backgroundColor: "var(--brand)",
+                  color: "var(--brand-foreground)",
+                }}
+              >
                 Enviar magic link
               </Button>
             </form>

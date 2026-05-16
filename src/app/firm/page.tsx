@@ -77,133 +77,166 @@ export default async function FirmPage() {
     );
   }
 
+  const onlineCount = firm.instances.filter(
+    (i) =>
+      i.lastHeartbeatAt &&
+      Date.now() - i.lastHeartbeatAt.getTime() < 3 * 60 * 1000,
+  ).length;
+
   return (
-    <main className="min-h-screen p-8 max-w-6xl mx-auto space-y-6">
+    <main className="container-page min-h-screen py-8 sm:py-12 space-y-8">
       <AutoRefresh intervalMs={5_000} />
-      <header className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-semibold tracking-tight">
+
+      <header className="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-4">
+        <div className="space-y-2">
+          <div className="eyebrow-chip">firm admin</div>
+          <h1 className="font-display text-3xl sm:text-4xl font-semibold tracking-tight">
             {firm.name}
           </h1>
           <p className="text-sm text-muted-foreground">
             {session.user.email} · Plan {firm.plan} ·{" "}
-            {firm.instances.length}/{firm.seatsPurchased} instancias
+            <span className="tabular-nums">{firm.instances.length}</span>/
+            <span className="tabular-nums">{firm.seatsPurchased}</span>{" "}
+            instancias · <span className="tabular-nums">{onlineCount}</span>{" "}
+            online
           </p>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 self-start sm:self-auto">
           <form action={generatePairingTokenAction}>
-            <Button type="submit">+ Añadir trabajador</Button>
+            <Button
+              type="submit"
+              className="h-10 px-4"
+              style={{
+                backgroundColor: "var(--brand)",
+                color: "var(--brand-foreground)",
+              }}
+            >
+              + Añadir trabajador
+            </Button>
           </form>
           <SignOutButton />
         </div>
       </header>
 
       {firm.pairingTokens.length > 0 && (
-        <Card>
-          <CardHeader>
-            <CardTitle>Pairing codes activos</CardTitle>
+        <Card className="card-paper border-0 shadow-none p-0">
+          <CardHeader className="px-6 pt-6">
+            <CardTitle className="font-display text-xl">
+              Pairing codes activos
+            </CardTitle>
             <CardDescription>
               Pasa el código al trabajador. Caduca 10 min después de generarse.
             </CardDescription>
           </CardHeader>
-          <CardContent>
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Código</TableHead>
-                  <TableHead>Caduca</TableHead>
-                  <TableHead>Creado</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {firm.pairingTokens.map((t) => {
-                  const minsLeft = Math.max(
-                    0,
-                    Math.round(
-                      (t.expiresAt.getTime() - Date.now()) / 60000,
-                    ),
-                  );
-                  return (
-                    <TableRow key={t.id}>
-                      <TableCell className="font-mono text-base font-medium tracking-wider">
-                        {t.code}
-                      </TableCell>
-                      <TableCell className="text-muted-foreground">
-                        en {minsLeft} min
-                      </TableCell>
-                      <TableCell className="text-muted-foreground">
-                        {t.createdAt.toLocaleTimeString("es-ES")}
-                      </TableCell>
-                    </TableRow>
-                  );
-                })}
-              </TableBody>
-            </Table>
+          <CardContent className="px-2 sm:px-4 pb-4">
+            <div className="flex flex-wrap gap-2 px-4">
+              {firm.pairingTokens.map((t) => {
+                const minsLeft = Math.max(
+                  0,
+                  Math.round((t.expiresAt.getTime() - Date.now()) / 60000),
+                );
+                return (
+                  <div
+                    key={t.id}
+                    className="card-quiet px-4 py-3 flex items-center gap-3"
+                    style={{
+                      background:
+                        "linear-gradient(135deg, var(--brand-soft) 0%, transparent 100%)",
+                    }}
+                  >
+                    <span className="font-mono text-lg font-semibold tracking-[0.15em]">
+                      {t.code}
+                    </span>
+                    <span className="text-xs text-muted-foreground">
+                      caduca en {minsLeft} min
+                    </span>
+                  </div>
+                );
+              })}
+            </div>
           </CardContent>
         </Card>
       )}
 
-      <Card>
-        <CardHeader>
-          <CardTitle>Trabajadores</CardTitle>
+      <Card className="card-paper border-0 shadow-none p-0">
+        <CardHeader className="px-6 pt-6">
+          <CardTitle className="font-display text-xl">Trabajadores</CardTitle>
           <CardDescription>
             Instancias de OpenClaw Copilot registradas para tu equipo.
           </CardDescription>
         </CardHeader>
-        <CardContent>
+        <CardContent className="px-2 sm:px-4 pb-4">
           {firm.instances.length === 0 ? (
-            <p className="text-sm text-muted-foreground">
+            <p className="text-sm text-muted-foreground px-4 py-8 text-center">
               Aún no hay instancias. Pulsa{" "}
-              <strong>"Añadir trabajador"</strong> (TODO) para generar un
+              <strong>"+ Añadir trabajador"</strong> arriba para generar un
               pairing code y registrar el primer PC.
             </p>
           ) : (
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Trabajador</TableHead>
-                  <TableHead>Estado</TableHead>
-                  <TableHead>Versión</TableHead>
-                  <TableHead>OS</TableHead>
-                  <TableHead>Último heartbeat</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {firm.instances.map((i) => {
-                  const isOnline =
-                    i.lastHeartbeatAt &&
-                    Date.now() - i.lastHeartbeatAt.getTime() < 3 * 60 * 1000;
-                  return (
-                    <TableRow key={i.id}>
-                      <TableCell className="font-medium">
-                        <Link
-                          href={`/firm/instances/${i.id}`}
-                          className="hover:underline"
-                        >
-                          {i.workerLabel}
-                        </Link>
-                      </TableCell>
-                      <TableCell>
-                        <Badge variant={isOnline ? "default" : "secondary"}>
-                          {isOnline ? "online" : "offline"}
-                        </Badge>
-                      </TableCell>
-                      <TableCell className="tabular-nums">
-                        {i.version}
-                      </TableCell>
-                      <TableCell className="text-muted-foreground">
-                        {i.os ?? "—"}
-                      </TableCell>
-                      <TableCell className="text-muted-foreground">
-                        {i.lastHeartbeatAt
-                          ? i.lastHeartbeatAt.toLocaleString("es-ES")
-                          : "nunca"}
-                      </TableCell>
-                    </TableRow>
-                  );
-                })}
-              </TableBody>
-            </Table>
+            <div className="overflow-x-auto">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead className="eyebrow text-[10px]">
+                      Trabajador
+                    </TableHead>
+                    <TableHead className="eyebrow text-[10px]">
+                      Estado
+                    </TableHead>
+                    <TableHead className="eyebrow text-[10px]">
+                      Versión
+                    </TableHead>
+                    <TableHead className="eyebrow text-[10px]">OS</TableHead>
+                    <TableHead className="eyebrow text-[10px]">
+                      Último heartbeat
+                    </TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {firm.instances.map((i) => {
+                    const isOnline =
+                      i.lastHeartbeatAt &&
+                      Date.now() - i.lastHeartbeatAt.getTime() < 3 * 60 * 1000;
+                    return (
+                      <TableRow key={i.id} className="hover:bg-paper-2/60">
+                        <TableCell className="font-medium">
+                          <Link
+                            href={`/firm/instances/${i.id}`}
+                            className="hover:text-brand transition-colors flex items-center gap-2"
+                          >
+                            <span
+                              className="h-2 w-2 rounded-full shrink-0"
+                              style={{
+                                backgroundColor: isOnline
+                                  ? "var(--brand)"
+                                  : "#bbb",
+                              }}
+                            />
+                            {i.workerLabel}
+                          </Link>
+                        </TableCell>
+                        <TableCell>
+                          <Badge variant={isOnline ? "default" : "secondary"}>
+                            {isOnline ? "online" : "offline"}
+                          </Badge>
+                        </TableCell>
+                        <TableCell className="tabular-nums text-sm">
+                          {i.version}
+                        </TableCell>
+                        <TableCell className="text-muted-foreground text-sm">
+                          {i.os ?? "—"}
+                        </TableCell>
+                        <TableCell className="text-muted-foreground text-sm">
+                          {i.lastHeartbeatAt
+                            ? i.lastHeartbeatAt.toLocaleString("es-ES")
+                            : "nunca"}
+                        </TableCell>
+                      </TableRow>
+                    );
+                  })}
+                </TableBody>
+              </Table>
+            </div>
           )}
         </CardContent>
       </Card>
