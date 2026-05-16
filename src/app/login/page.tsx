@@ -14,7 +14,7 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 
-const DEV_ENABLED = process.env.DEV_AUTH_ENABLED === "true";
+export const dynamic = "force-dynamic";
 
 async function loginAction(formData: FormData) {
   "use server";
@@ -51,6 +51,7 @@ export default async function LoginPage({
 }) {
   const params = await searchParams;
   const sent = params?.sent === "1";
+  const devEnabled = process.env.DEV_AUTH_ENABLED === "true";
 
   return (
     <main className="min-h-screen flex items-center justify-center p-8">
@@ -90,7 +91,7 @@ export default async function LoginPage({
             </form>
           )}
 
-          {DEV_ENABLED && (
+          {devEnabled && (
             <div className="pt-4 border-t space-y-3">
               <p className="text-xs text-muted-foreground">
                 <strong>Modo dev:</strong> login directo sin verificación.
