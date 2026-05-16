@@ -89,7 +89,7 @@ export default async function InstanceDetailPage({
   });
 
   return (
-    <main className="min-h-screen p-8 max-w-6xl mx-auto space-y-6">
+    <main className="container-page min-h-screen py-8 sm:py-12 space-y-8">
       <AutoRefresh intervalMs={5_000} />
 
       <div className="text-sm">
@@ -101,17 +101,27 @@ export default async function InstanceDetailPage({
         </Link>
       </div>
 
-      <header className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-semibold tracking-tight">
+      <header className="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-4">
+        <div className="space-y-2">
+          <div className="eyebrow-chip flex items-center gap-1.5">
+            <span
+              className="h-1.5 w-1.5 rounded-full"
+              style={{ backgroundColor: isOnline ? "var(--brand)" : "#bbb" }}
+            />
+            instancia
+          </div>
+          <h1 className="font-display text-3xl sm:text-4xl font-semibold tracking-tight">
             {instance.workerLabel}
           </h1>
-          <p className="text-sm text-muted-foreground">
-            instance_id <code className="text-xs">{instance.id}</code>
+          <p className="text-xs text-muted-foreground">
+            <code>{instance.id}</code>
           </p>
         </div>
-        <div className="flex items-center gap-3">
-          <Badge variant={isOnline ? "default" : "secondary"} className="text-base px-3 py-1">
+        <div className="flex items-center gap-2 self-start sm:self-auto">
+          <Badge
+            variant={isOnline ? "default" : "secondary"}
+            className="text-sm px-3 py-1"
+          >
             {isOnline ? "online" : "offline"}
           </Badge>
           <form action={unpairInstanceAction}>
@@ -122,94 +132,92 @@ export default async function InstanceDetailPage({
         </div>
       </header>
 
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-        <Card>
-          <CardHeader className="pb-2">
-            <CardDescription>Versión</CardDescription>
-          </CardHeader>
-          <CardContent>
-            <p className="text-lg font-medium tabular-nums">
-              {instance.version}
-            </p>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardHeader className="pb-2">
-            <CardDescription>OS</CardDescription>
-          </CardHeader>
-          <CardContent>
-            <p className="text-lg font-medium">{instance.os ?? "—"}</p>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardHeader className="pb-2">
-            <CardDescription>Heartbeats totales</CardDescription>
-          </CardHeader>
-          <CardContent>
-            <p className="text-lg font-medium tabular-nums">{totalBeats}</p>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardHeader className="pb-2">
-            <CardDescription>Uptime actual</CardDescription>
-          </CardHeader>
-          <CardContent>
-            <p className="text-lg font-medium tabular-nums">
-              {formatUptime(lastBeat?.uptimeS)}
-            </p>
-          </CardContent>
-        </Card>
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+        <div className="card-paper p-4 space-y-1">
+          <div className="eyebrow text-[10px]">Versión</div>
+          <div className="text-lg font-medium tabular-nums">
+            {instance.version}
+          </div>
+        </div>
+        <div className="card-paper p-4 space-y-1">
+          <div className="eyebrow text-[10px]">OS</div>
+          <div className="text-lg font-medium">{instance.os ?? "—"}</div>
+        </div>
+        <div className="card-paper p-4 space-y-1">
+          <div className="eyebrow text-[10px]">Heartbeats totales</div>
+          <div className="text-lg font-medium tabular-nums">{totalBeats}</div>
+        </div>
+        <div className="card-paper p-4 space-y-1">
+          <div className="eyebrow text-[10px]">Uptime actual</div>
+          <div className="text-lg font-medium tabular-nums">
+            {formatUptime(lastBeat?.uptimeS)}
+          </div>
+        </div>
       </div>
 
-      <Card>
-        <CardHeader>
-          <CardTitle>Heartbeats recientes</CardTitle>
+      <Card className="card-paper border-0 shadow-none p-0">
+        <CardHeader className="px-6 pt-6">
+          <CardTitle className="font-display text-xl">
+            Heartbeats recientes
+          </CardTitle>
           <CardDescription>
             Últimos {instance.heartbeats.length} pings recibidos.
           </CardDescription>
         </CardHeader>
-        <CardContent>
+        <CardContent className="px-2 sm:px-4 pb-4">
           {instance.heartbeats.length === 0 ? (
-            <p className="text-sm text-muted-foreground">
+            <p className="text-sm text-muted-foreground px-4 py-8 text-center">
               No hay heartbeats. ¿La instancia ha enviado alguno?
             </p>
           ) : (
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Recibido</TableHead>
-                  <TableHead className="text-right">CPU %</TableHead>
-                  <TableHead className="text-right">RAM MB</TableHead>
-                  <TableHead className="text-right">Tokens 24h</TableHead>
-                  <TableHead className="text-right">Uptime</TableHead>
-                  <TableHead>Error</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {instance.heartbeats.map((h) => (
-                  <TableRow key={h.id}>
-                    <TableCell className="text-muted-foreground">
-                      {h.receivedAt.toLocaleString("es-ES")}
-                    </TableCell>
-                    <TableCell className="text-right tabular-nums">
-                      {h.cpuPct?.toFixed(1) ?? "—"}
-                    </TableCell>
-                    <TableCell className="text-right tabular-nums">
-                      {h.ramMb ?? "—"}
-                    </TableCell>
-                    <TableCell className="text-right tabular-nums">
-                      {formatTokens(h.tokensConsumed24h)}
-                    </TableCell>
-                    <TableCell className="text-right tabular-nums">
-                      {formatUptime(h.uptimeS)}
-                    </TableCell>
-                    <TableCell className="text-destructive text-xs">
-                      {h.lastError ?? ""}
-                    </TableCell>
+            <div className="overflow-x-auto">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead className="eyebrow text-[10px]">
+                      Recibido
+                    </TableHead>
+                    <TableHead className="eyebrow text-[10px] text-right">
+                      CPU %
+                    </TableHead>
+                    <TableHead className="eyebrow text-[10px] text-right">
+                      RAM MB
+                    </TableHead>
+                    <TableHead className="eyebrow text-[10px] text-right">
+                      Tokens 24h
+                    </TableHead>
+                    <TableHead className="eyebrow text-[10px] text-right">
+                      Uptime
+                    </TableHead>
+                    <TableHead className="eyebrow text-[10px]">Error</TableHead>
                   </TableRow>
-                ))}
-              </TableBody>
-            </Table>
+                </TableHeader>
+                <TableBody>
+                  {instance.heartbeats.map((h) => (
+                    <TableRow key={h.id} className="hover:bg-paper-2/60">
+                      <TableCell className="text-muted-foreground text-sm">
+                        {h.receivedAt.toLocaleString("es-ES")}
+                      </TableCell>
+                      <TableCell className="text-right tabular-nums text-sm">
+                        {h.cpuPct?.toFixed(1) ?? "—"}
+                      </TableCell>
+                      <TableCell className="text-right tabular-nums text-sm">
+                        {h.ramMb ?? "—"}
+                      </TableCell>
+                      <TableCell className="text-right tabular-nums text-sm">
+                        {formatTokens(h.tokensConsumed24h)}
+                      </TableCell>
+                      <TableCell className="text-right tabular-nums text-sm">
+                        {formatUptime(h.uptimeS)}
+                      </TableCell>
+                      <TableCell className="text-destructive text-xs">
+                        {h.lastError ?? ""}
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </div>
           )}
         </CardContent>
       </Card>

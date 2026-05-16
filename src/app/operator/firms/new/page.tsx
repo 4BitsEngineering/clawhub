@@ -39,34 +39,40 @@ async function createFirmAction(formData: FormData) {
 export default async function NewFirmPage() {
   await requireOperator();
   return (
-    <main className="min-h-screen p-8 max-w-2xl mx-auto space-y-6">
+    <main className="container-page min-h-screen py-8 sm:py-12 max-w-2xl space-y-8">
       <div className="text-sm">
         <Link
           href="/operator"
           className="text-muted-foreground hover:text-foreground"
         >
-          ← operator
+          ← clawhub
         </Link>
       </div>
 
-      <header>
-        <h1 className="text-2xl font-semibold tracking-tight">Nueva firma</h1>
+      <header className="space-y-2">
+        <div className="eyebrow-chip">crear tenant</div>
+        <h1 className="font-display text-3xl sm:text-4xl font-semibold tracking-tight">
+          Nueva firma
+        </h1>
         <p className="text-sm text-muted-foreground">
-          Crea una firma (tenant) con plan y nº de seats inicial.
+          Crea un tenant con plan y nº de seats inicial. Después puedes editar
+          plan/seats y añadir firm_admin users.
         </p>
       </header>
 
-      <Card>
+      <Card className="card-paper border-0 shadow-none">
         <CardHeader>
-          <CardTitle>Datos</CardTitle>
+          <CardTitle className="font-display text-xl">Datos</CardTitle>
           <CardDescription>
-            Después podrás editar plan/seats y añadir firm_admin users.
+            El slug y firm_id se generan automáticamente al crear.
           </CardDescription>
         </CardHeader>
         <CardContent>
-          <form action={createFirmAction} className="space-y-4">
+          <form action={createFirmAction} className="space-y-5">
             <div className="space-y-2">
-              <Label htmlFor="name">Nombre comercial</Label>
+              <Label htmlFor="name" className="eyebrow text-[10px]">
+                Nombre comercial
+              </Label>
               <Input
                 id="name"
                 name="name"
@@ -77,7 +83,9 @@ export default async function NewFirmPage() {
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor="plan">Plan</Label>
+              <Label htmlFor="plan" className="eyebrow text-[10px]">
+                Plan
+              </Label>
               <select
                 id="plan"
                 name="plan"
@@ -92,7 +100,9 @@ export default async function NewFirmPage() {
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor="seats">Seats incluidos</Label>
+              <Label htmlFor="seats" className="eyebrow text-[10px]">
+                Seats incluidos
+              </Label>
               <Input
                 id="seats"
                 name="seats"
@@ -103,12 +113,20 @@ export default async function NewFirmPage() {
                 required
               />
               <p className="text-xs text-muted-foreground">
-                Número de instancias permitidas. Editable después.
+                Nº de instancias permitidas. Editable después.
               </p>
             </div>
 
-            <div className="flex gap-2 pt-2">
-              <Button type="submit">Crear firma</Button>
+            <div className="flex gap-2 pt-3">
+              <Button
+                type="submit"
+                style={{
+                  backgroundColor: "var(--brand)",
+                  color: "var(--brand-foreground)",
+                }}
+              >
+                Crear firma
+              </Button>
               <Link
                 href="/operator"
                 className="inline-flex items-center px-3 text-sm text-muted-foreground hover:text-foreground"

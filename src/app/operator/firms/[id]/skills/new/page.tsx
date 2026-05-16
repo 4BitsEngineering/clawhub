@@ -59,7 +59,7 @@ export default async function NewSkillPage({
   }
 
   return (
-    <main className="min-h-screen p-8 max-w-3xl mx-auto space-y-6">
+    <main className="container-page min-h-screen py-8 sm:py-12 max-w-3xl space-y-8">
       <div className="text-sm">
         <Link
           href={`/operator/firms/${firm.id}/skills`}
@@ -69,26 +69,31 @@ export default async function NewSkillPage({
         </Link>
       </div>
 
-      <header>
-        <h1 className="text-2xl font-semibold tracking-tight">Nuevo skill</h1>
+      <header className="space-y-2">
+        <div className="eyebrow-chip">crear skill</div>
+        <h1 className="font-display text-3xl sm:text-4xl font-semibold tracking-tight">
+          Nuevo skill
+        </h1>
         <p className="text-sm text-muted-foreground">
           SOP, plantilla o procedimiento que se distribuirá a todas las
           instancias de {firm.name}.
         </p>
       </header>
 
-      <Card>
+      <Card className="card-paper border-0 shadow-none">
         <CardHeader>
-          <CardTitle>Contenido</CardTitle>
+          <CardTitle className="font-display text-xl">Contenido</CardTitle>
           <CardDescription>
             Las instancias detectarán el nuevo skill en el próximo heartbeat
             y lo descargarán automáticamente.
           </CardDescription>
         </CardHeader>
         <CardContent>
-          <form action={createSkillAction} className="space-y-4">
+          <form action={createSkillAction} className="space-y-5">
             <div className="space-y-2">
-              <Label htmlFor="title">Título</Label>
+              <Label htmlFor="title" className="eyebrow text-[10px]">
+                Título
+              </Label>
               <Input
                 id="title"
                 name="title"
@@ -99,10 +104,10 @@ export default async function NewSkillPage({
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor="slug">
+              <Label htmlFor="slug" className="eyebrow text-[10px]">
                 Slug{" "}
-                <span className="text-xs text-muted-foreground">
-                  (opcional, se genera del título si lo dejas vacío)
+                <span className="normal-case text-[11px] text-muted-foreground tracking-normal">
+                  (opcional, se genera del título)
                 </span>
               </Label>
               <Input
@@ -115,9 +120,11 @@ export default async function NewSkillPage({
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor="description">
+              <Label htmlFor="description" className="eyebrow text-[10px]">
                 Descripción{" "}
-                <span className="text-xs text-muted-foreground">(opcional)</span>
+                <span className="normal-case text-[11px] text-muted-foreground tracking-normal">
+                  (opcional)
+                </span>
               </Label>
               <Input
                 id="description"
@@ -128,7 +135,9 @@ export default async function NewSkillPage({
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor="content">Contenido (markdown)</Label>
+              <Label htmlFor="content" className="eyebrow text-[10px]">
+                Contenido (markdown)
+              </Label>
               <textarea
                 id="content"
                 name="content"
@@ -155,8 +164,16 @@ export default async function NewSkillPage({
               </span>
             </div>
 
-            <div className="flex gap-2 pt-2">
-              <Button type="submit">Crear skill</Button>
+            <div className="flex gap-2 pt-3">
+              <Button
+                type="submit"
+                style={{
+                  backgroundColor: "var(--brand)",
+                  color: "var(--brand-foreground)",
+                }}
+              >
+                Crear skill
+              </Button>
               <Link
                 href={`/operator/firms/${firm.id}/skills`}
                 className="inline-flex items-center px-3 text-sm text-muted-foreground hover:text-foreground"

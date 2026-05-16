@@ -65,7 +65,7 @@ export default async function EditSkillPage({
   }
 
   return (
-    <main className="min-h-screen p-8 max-w-3xl mx-auto space-y-6">
+    <main className="container-page min-h-screen py-8 sm:py-12 max-w-3xl space-y-8">
       <div className="text-sm">
         <Link
           href={`/operator/firms/${firm.id}/skills`}
@@ -75,17 +75,18 @@ export default async function EditSkillPage({
         </Link>
       </div>
 
-      <header className="flex items-start justify-between gap-4">
-        <div>
-          <h1 className="text-2xl font-semibold tracking-tight">
-            Editar skill
+      <header className="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-4">
+        <div className="space-y-2">
+          <div className="eyebrow-chip">editar skill</div>
+          <h1 className="font-display text-3xl sm:text-4xl font-semibold tracking-tight">
+            {skill.title}
           </h1>
-          <p className="text-sm text-muted-foreground">
+          <p className="text-xs text-muted-foreground">
             slug <code className="font-mono">{skill.slug}</code> · creado{" "}
             {skill.createdAt.toLocaleDateString("es-ES")}
           </p>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 self-start sm:self-auto">
           <Badge variant="secondary">v{skill.version}</Badge>
           <Badge variant={skill.active ? "default" : "secondary"}>
             {skill.active ? "activo" : "inactivo"}
@@ -93,18 +94,20 @@ export default async function EditSkillPage({
         </div>
       </header>
 
-      <Card>
+      <Card className="card-paper border-0 shadow-none">
         <CardHeader>
-          <CardTitle>Contenido</CardTitle>
+          <CardTitle className="font-display text-xl">Contenido</CardTitle>
           <CardDescription>
-            Guardar incrementa la versión a v{skill.version + 1} y notifica
-            a las instancias en el próximo heartbeat.
+            Guardar incrementa la versión a v{skill.version + 1} y notifica a
+            las instancias en el próximo heartbeat.
           </CardDescription>
         </CardHeader>
         <CardContent>
-          <form action={updateSkillAction} className="space-y-4">
+          <form action={updateSkillAction} className="space-y-5">
             <div className="space-y-2">
-              <Label htmlFor="title">Título</Label>
+              <Label htmlFor="title" className="eyebrow text-[10px]">
+                Título
+              </Label>
               <Input
                 id="title"
                 name="title"
@@ -115,10 +118,10 @@ export default async function EditSkillPage({
             </div>
 
             <div className="space-y-2">
-              <Label>
+              <Label className="eyebrow text-[10px]">
                 Slug{" "}
-                <span className="text-xs text-muted-foreground">
-                  (inmutable después de crear)
+                <span className="normal-case text-[11px] text-muted-foreground tracking-normal">
+                  (inmutable)
                 </span>
               </Label>
               <Input
@@ -129,9 +132,11 @@ export default async function EditSkillPage({
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor="description">
+              <Label htmlFor="description" className="eyebrow text-[10px]">
                 Descripción{" "}
-                <span className="text-xs text-muted-foreground">(opcional)</span>
+                <span className="normal-case text-[11px] text-muted-foreground tracking-normal">
+                  (opcional)
+                </span>
               </Label>
               <Input
                 id="description"
@@ -142,7 +147,9 @@ export default async function EditSkillPage({
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor="content">Contenido (markdown)</Label>
+              <Label htmlFor="content" className="eyebrow text-[10px]">
+                Contenido (markdown)
+              </Label>
               <textarea
                 id="content"
                 name="content"
@@ -166,8 +173,16 @@ export default async function EditSkillPage({
               </Label>
             </div>
 
-            <div className="flex gap-2 pt-2">
-              <Button type="submit">Guardar (v{skill.version + 1})</Button>
+            <div className="flex gap-2 pt-3">
+              <Button
+                type="submit"
+                style={{
+                  backgroundColor: "var(--brand)",
+                  color: "var(--brand-foreground)",
+                }}
+              >
+                Guardar (v{skill.version + 1})
+              </Button>
               <Link
                 href={`/operator/firms/${firm.id}/skills`}
                 className="inline-flex items-center px-3 text-sm text-muted-foreground hover:text-foreground"
@@ -179,9 +194,14 @@ export default async function EditSkillPage({
         </CardContent>
       </Card>
 
-      <Card className="border-destructive/30">
+      <Card className="card-paper border-0 shadow-none border-destructive/30">
         <CardHeader>
-          <CardTitle className="text-destructive">Eliminar</CardTitle>
+          <div className="eyebrow text-[10px] text-destructive">
+            Zona peligrosa
+          </div>
+          <CardTitle className="font-display text-xl text-destructive">
+            Eliminar skill
+          </CardTitle>
           <CardDescription>
             Borrar el skill lo retira de todas las instancias en el próximo
             sync. Operación irreversible.

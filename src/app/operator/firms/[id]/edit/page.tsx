@@ -61,7 +61,7 @@ export default async function EditFirmPage({
   }
 
   return (
-    <main className="min-h-screen p-8 max-w-2xl mx-auto space-y-6">
+    <main className="container-page min-h-screen py-8 sm:py-12 max-w-2xl space-y-8">
       <div className="text-sm">
         <Link
           href={`/operator/firms/${id}`}
@@ -71,18 +71,23 @@ export default async function EditFirmPage({
         </Link>
       </div>
 
-      <header>
-        <h1 className="text-2xl font-semibold tracking-tight">Editar firma</h1>
+      <header className="space-y-2">
+        <div className="eyebrow-chip">editar tenant</div>
+        <h1 className="font-display text-3xl sm:text-4xl font-semibold tracking-tight">
+          Editar firma
+        </h1>
       </header>
 
-      <Card>
+      <Card className="card-paper border-0 shadow-none">
         <CardHeader>
-          <CardTitle>Datos</CardTitle>
+          <CardTitle className="font-display text-xl">Datos</CardTitle>
         </CardHeader>
         <CardContent>
-          <form action={updateFirmAction} className="space-y-4">
+          <form action={updateFirmAction} className="space-y-5">
             <div className="space-y-2">
-              <Label htmlFor="name">Nombre comercial</Label>
+              <Label htmlFor="name" className="eyebrow text-[10px]">
+                Nombre comercial
+              </Label>
               <Input
                 id="name"
                 name="name"
@@ -93,7 +98,9 @@ export default async function EditFirmPage({
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor="plan">Plan</Label>
+              <Label htmlFor="plan" className="eyebrow text-[10px]">
+                Plan
+              </Label>
               <select
                 id="plan"
                 name="plan"
@@ -108,7 +115,9 @@ export default async function EditFirmPage({
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor="seats">Seats incluidos</Label>
+              <Label htmlFor="seats" className="eyebrow text-[10px]">
+                Seats incluidos
+              </Label>
               <Input
                 id="seats"
                 name="seats"
@@ -120,26 +129,39 @@ export default async function EditFirmPage({
               />
             </div>
 
-            <div className="pt-2">
-              <Button type="submit">Guardar cambios</Button>
+            <div className="pt-3">
+              <Button
+                type="submit"
+                style={{
+                  backgroundColor: "var(--brand)",
+                  color: "var(--brand-foreground)",
+                }}
+              >
+                Guardar cambios
+              </Button>
             </div>
           </form>
         </CardContent>
       </Card>
 
-      <Card className="border-destructive/30">
+      <Card className="card-paper border-0 shadow-none border-destructive/30">
         <CardHeader>
-          <CardTitle className="text-destructive">Zona peligrosa</CardTitle>
+          <div className="eyebrow text-[10px] text-destructive">
+            Zona peligrosa
+          </div>
+          <CardTitle className="font-display text-xl text-destructive">
+            Borrar firma
+          </CardTitle>
           <CardDescription>
-            Borrar la firma elimina sus instancias, heartbeats, pairing tokens
-            y usuarios firm_admin asociados (cascada). Operación irreversible.
+            Elimina instancias, heartbeats, pairing tokens y usuarios
+            firm_admin asociados (cascada). Operación irreversible.
           </CardDescription>
         </CardHeader>
         <CardContent>
           <form action={deleteFirmAction} className="space-y-4">
             <div className="space-y-2">
-              <Label htmlFor="confirm_name">
-                Escribe el nombre de la firma para confirmar
+              <Label htmlFor="confirm_name" className="eyebrow text-[10px]">
+                Escribe el nombre para confirmar
               </Label>
               <Input
                 id="confirm_name"
