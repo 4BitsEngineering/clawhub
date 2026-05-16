@@ -2,6 +2,7 @@ import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 import { db } from "@/lib/db";
+import { getSession } from "@/lib/session";
 import { AutoRefresh } from "@/components/auto-refresh";
 import { Button } from "@/components/ui/button";
 import {
@@ -45,6 +46,8 @@ export default async function InstanceDetailPage({
 }: {
   params: Promise<{ id: string }>;
 }) {
+  const session = await getSession();
+  if (!session) redirect("/login");
   const { id } = await params;
 
   const instance = await db.instance.findUnique({
@@ -59,6 +62,14 @@ export default async function InstanceDetailPage({
   });
 
   if (!instance) notFound();
+
+  // firm_admin solo puede ver instancias de su firma; operator ve cualquiera.
+  if (
+    session.user.role === "FIRM_ADMIN" &&
+    instance.firmId !== session.user.firmId
+  ) {
+    notFound();
+  }
 
   async function unpairInstanceAction() {
     "use server";

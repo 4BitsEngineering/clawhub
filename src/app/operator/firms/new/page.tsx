@@ -2,6 +2,7 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 import { db } from "@/lib/db";
+import { requireOperator } from "@/lib/session";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -35,7 +36,8 @@ async function createFirmAction(formData: FormData) {
   redirect(`/operator/firms/${firm.id}`);
 }
 
-export default function NewFirmPage() {
+export default async function NewFirmPage() {
+  await requireOperator();
   return (
     <main className="min-h-screen p-8 max-w-2xl mx-auto space-y-6">
       <div className="text-sm">

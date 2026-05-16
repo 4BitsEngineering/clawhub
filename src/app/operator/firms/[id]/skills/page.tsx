@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { db } from "@/lib/db";
+import { requireOperator } from "@/lib/session";
 import { AutoRefresh } from "@/components/auto-refresh";
 import { buttonVariants } from "@/components/ui/button";
 import {
@@ -27,6 +28,7 @@ export default async function FirmSkillsPage({
 }: {
   params: Promise<{ id: string }>;
 }) {
+  await requireOperator();
   const { id } = await params;
 
   const firm = await db.firm.findUnique({

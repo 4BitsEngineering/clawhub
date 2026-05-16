@@ -2,6 +2,7 @@ import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 import { db } from "@/lib/db";
+import { requireOperator } from "@/lib/session";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -21,6 +22,7 @@ export default async function EditSkillPage({
 }: {
   params: Promise<{ id: string; skillId: string }>;
 }) {
+  await requireOperator();
   const { id, skillId } = await params;
 
   const firm = await db.firm.findUnique({ where: { id } });

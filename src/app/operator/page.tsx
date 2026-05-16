@@ -1,7 +1,8 @@
-// TODO: re-añadir imports de auth (redirect, auth, SignOutButton) cuando reactivemos login.
 import Link from "next/link";
 import { db } from "@/lib/db";
+import { requireOperator } from "@/lib/session";
 import { AutoRefresh } from "@/components/auto-refresh";
+import { SignOutButton } from "@/components/sign-out-button";
 import {
   Card,
   CardContent,
@@ -23,7 +24,7 @@ import { buttonVariants } from "@/components/ui/button";
 export const dynamic = "force-dynamic";
 
 export default async function OperatorPage() {
-  // TODO: re-enable auth check cuando podamos probar login.
+  const session = await requireOperator();
   const firms = await db.firm.findMany({
     orderBy: { createdAt: "desc" },
     include: {
@@ -41,12 +42,15 @@ export default async function OperatorPage() {
             clawhub · operator
           </h1>
           <p className="text-sm text-muted-foreground">
-            Vista dev sin login · TODO restaurar auth check
+            {session.user.email}
           </p>
         </div>
-        <Link href="/operator/firms/new" className={buttonVariants()}>
-          + Nueva firma
-        </Link>
+        <div className="flex items-center gap-2">
+          <Link href="/operator/firms/new" className={buttonVariants()}>
+            + Nueva firma
+          </Link>
+          <SignOutButton />
+        </div>
       </header>
 
       <Card>

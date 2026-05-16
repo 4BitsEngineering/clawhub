@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { revalidatePath } from "next/cache";
 import { db } from "@/lib/db";
+import { requireFirmAdmin } from "@/lib/session";
 
 export const dynamic = "force-dynamic";
 
@@ -22,8 +23,7 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { AutoRefresh } from "@/components/auto-refresh";
-
-const DEMO_FIRM_ID = "00000000-0000-0000-0000-000000000001";
+import { SignOutButton } from "@/components/sign-out-button";
 
 // Genera un pairing code humano-friendly (8 chars, sin caracteres confusos).
 function generatePairingCode(): string {
@@ -36,29 +36,25 @@ function generatePairingCode(): string {
   return code;
 }
 
-async function generatePairingTokenAction() {
-  "use server";
-  const code = generatePairingCode();
-  await db.pairingToken.create({
-    data: {
-      firmId: DEMO_FIRM_ID,
-      code,
-      expiresAt: new Date(Date.now() + 10 * 60 * 1000), // 10 min
-    },
-  });
-  revalidatePath("/firm");
-}
+export default async function FirmPage() {
+  const session = await requireFirmAdmin();
+  const firmId = session.user.firmId;
 
-export default async function FirmPage({
-  searchParams,
-}: {
-  searchParams: Promise<Record<string, string | string[] | undefined>>;
-}) {
-  // TODO: re-enable auth (session + role + firmId). Por ahora hardcoded a demo firm.
-  await searchParams;
+  async function generatePairingTokenAction() {
+    "use server";
+    const code = generatePairingCode();
+    await db.pairingToken.create({
+      data: {
+        firmId,
+        code,
+        expiresAt: new Date(Date.now() + 10 * 60 * 1000),
+      },
+    });
+    revalidatePath("/firm");
+  }
 
   const firm = await db.firm.findUnique({
-    where: { id: DEMO_FIRM_ID },
+    where: { id: firmId },
     include: {
       instances: {
         orderBy: { createdAt: "desc" },
@@ -90,13 +86,16 @@ export default async function FirmPage({
             {firm.name}
           </h1>
           <p className="text-sm text-muted-foreground">
-            Plan {firm.plan} · {firm.instances.length}/{firm.seatsPurchased}{" "}
-            instancias · vista dev sin login
+            {session.user.email} · Plan {firm.plan} ·{" "}
+            {firm.instances.length}/{firm.seatsPurchased} instancias
           </p>
         </div>
-        <form action={generatePairingTokenAction}>
-          <Button type="submit">+ Añadir trabajador</Button>
-        </form>
+        <div className="flex items-center gap-2">
+          <form action={generatePairingTokenAction}>
+            <Button type="submit">+ Añadir trabajador</Button>
+          </form>
+          <SignOutButton />
+        </div>
       </header>
 
       {firm.pairingTokens.length > 0 && (

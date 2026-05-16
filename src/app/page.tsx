@@ -1,10 +1,10 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
-import { auth } from "@/lib/auth";
+import { getSession } from "@/lib/session";
 import { buttonVariants } from "@/components/ui/button";
 
 export default async function HomePage() {
-  const session = await auth();
+  const session = await getSession();
 
   if (session?.user) {
     if (session.user.role === "OPERATOR") redirect("/operator");
