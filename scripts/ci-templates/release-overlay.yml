@@ -1,0 +1,83 @@
+name: Release overlay bundle to clawhub
+
+# Edita estos valores ANTES de subir el workflow:
+env:
+  KIND: OVERLAY              # OPENCLAW | BRIDGE | OVERLAY
+  OVERLAY_ID: asesoria       # solo para kind=OVERLAY: asesoria | ai-office | content | marketing | temarios
+  CHANNEL: stable            # stable | beta | dev
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write  # crear GitHub Release
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # tags + history para changelog
+
+      - name: Derive version from tag
+        id: ver
+        run: |
+          VERSION="${GITHUB_REF_NAME#v}"
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "Version: $VERSION"
+
+      - name: Pack tarball
+        id: pack
+        run: |
+          NAME="${{ env.OVERLAY_ID }}-${{ steps.ver.outputs.version }}.tar.gz"
+          # Excluir .git, node_modules, builds locales
+          tar -czf "$NAME" \
+            --exclude=".git" \
+            --exclude="node_modules" \
+            --exclude=".next" \
+            --exclude="dist" \
+            --exclude="*.log" \
+            .
+          SHA=$(sha256sum "$NAME" | cut -d' ' -f1)
+          SIZE=$(stat -c%s "$NAME")
+          echo "name=$NAME" >> "$GITHUB_OUTPUT"
+          echo "sha256=$SHA" >> "$GITHUB_OUTPUT"
+          echo "size=$SIZE" >> "$GITHUB_OUTPUT"
+          echo "Packed: $NAME ($SIZE bytes, sha256=$SHA)"
+
+      - name: Create GitHub Release
+        id: release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: ${{ steps.pack.outputs.name }}
+          tag_name: ${{ github.ref_name }}
+          generate_release_notes: true
+
+      - name: Resolve download URL
+        id: url
+        run: |
+          URL="https://github.com/${{ github.repository }}/releases/download/${{ github.ref_name }}/${{ steps.pack.outputs.name }}"
+          echo "url=$URL" >> "$GITHUB_OUTPUT"
+
+      - name: Register bundle in clawhub
+        run: |
+          curl -fsS -X POST "${{ secrets.CLAWHUB_URL }}/api/v0/bundles/register" \
+            -H "Authorization: Bearer ${{ secrets.CLAWHUB_API_KEY }}" \
+            -H "Content-Type: application/json; charset=utf-8" \
+            -d "$(cat <<EOF
+          {
+            "kind": "${{ env.KIND }}",
+            "overlayId": "${{ env.OVERLAY_ID }}",
+            "version": "${{ steps.ver.outputs.version }}",
+            "channel": "${{ env.CHANNEL }}",
+            "sha256": "${{ steps.pack.outputs.sha256 }}",
+            "downloadUrl": "${{ steps.url.outputs.url }}",
+            "sizeBytes": ${{ steps.pack.outputs.size }},
+            "sourceCommit": "${{ github.sha }}",
+            "publishedBy": "github-actions"
+          }
+          EOF
+          )"

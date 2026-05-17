@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { db } from "@/lib/db";
 import { generateInstanceToken } from "@/lib/tokens";
+import { recordActivity, systemActor } from "@/lib/activity";
 
 const PairBody = z.object({
   pairing_code: z.string().min(4).max(32),
@@ -36,24 +37,120 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "code_expired" }, { status: 410 });
   }
 
+  const isRepair = pairingToken.existingInstanceId != null;
+
+  // Quota enforcement — solo en first-pair (re-pair no consume slot nuevo,
+  // mantiene la instance_id). Bloqueamos si la firma ya consumió todos sus
+  // seats. Activity logging para que el operator vea el bloqueo.
+  if (!isRepair) {
+    const instanceCount = await db.instance.count({
+      where: { firmId: pairingToken.firmId },
+    });
+    if (instanceCount >= pairingToken.firm.seatsPurchased) {
+      await recordActivity({
+        kind: "pair.quota_blocked",
+        summary: `Alta bloqueada: ${pairingToken.firm.name} alcanzó el límite de ${pairingToken.firm.seatsPurchased} PCs`,
+        firmId: pairingToken.firmId,
+        actor: systemActor("pair-endpoint"),
+        metadata: {
+          seats_purchased: pairingToken.firm.seatsPurchased,
+          seats_used: instanceCount,
+          attempted_label: body.worker_label,
+        },
+      });
+      return NextResponse.json(
+        {
+          error: "quota_exceeded",
+          seats_purchased: pairingToken.firm.seatsPurchased,
+          seats_used: instanceCount,
+        },
+        { status: 403 },
+      );
+    }
+  }
+
   const { plain, hash } = generateInstanceToken();
 
-  // Crear Instance + marcar pairing como usado en una transacción.
-  const [instance] = await db.$transaction([
-    db.instance.create({
-      data: {
-        instanceTokenHash: hash,
-        firmId: pairingToken.firmId,
-        workerLabel: body.worker_label,
+  let instance;
+  if (isRepair) {
+    // Re-pair: validar que la instance_id objetivo todavía existe y pertenece
+    // a la misma firma del token (defensa en profundidad — el token ya está
+    // vinculado, pero validamos por si la instance se borró entre la
+    // generación del token y el uso).
+    const existing = await db.instance.findUnique({
+      where: { id: pairingToken.existingInstanceId! },
+    });
+    if (!existing) {
+      return NextResponse.json(
+        { error: "target_instance_not_found" },
+        { status: 410 },
+      );
+    }
+    if (existing.firmId !== pairingToken.firmId) {
+      return NextResponse.json({ error: "cross_firm_repair" }, { status: 403 });
+    }
+
+    const [updated] = await db.$transaction([
+      db.instance.update({
+        where: { id: existing.id },
+        data: {
+          instanceTokenHash: hash,
+          workerLabel: body.worker_label,
+          version: body.version,
+          os: body.os ?? null,
+        },
+      }),
+      db.pairingToken.update({
+        where: { id: pairingToken.id },
+        data: { usedAt: new Date() },
+      }),
+    ]);
+    instance = updated;
+
+    await recordActivity({
+      kind: "instance.re_pair_completed",
+      summary: `Re-pair completado en "${updated.workerLabel}" (instance ${updated.id.slice(0, 8)}…)`,
+      firmId: pairingToken.firmId,
+      instanceId: updated.id,
+      actor: systemActor("pair-endpoint"),
+      metadata: {
+        worker_label: body.worker_label,
         version: body.version,
         os: body.os ?? null,
       },
-    }),
-    db.pairingToken.update({
-      where: { id: pairingToken.id },
-      data: { usedAt: new Date() },
-    }),
-  ]);
+    });
+  } else {
+    const [created] = await db.$transaction([
+      db.instance.create({
+        data: {
+          instanceTokenHash: hash,
+          firmId: pairingToken.firmId,
+          workerLabel: body.worker_label,
+          version: body.version,
+          os: body.os ?? null,
+        },
+      }),
+      db.pairingToken.update({
+        where: { id: pairingToken.id },
+        data: { usedAt: new Date() },
+      }),
+    ]);
+    instance = created;
+
+    await recordActivity({
+      kind: "pair.success",
+      summary: `Nuevo PC paireado: ${body.worker_label}`,
+      firmId: pairingToken.firmId,
+      instanceId: instance.id,
+      actor: systemActor("pair-endpoint"),
+      metadata: {
+        worker_label: body.worker_label,
+        version: body.version,
+        os: body.os ?? null,
+        pairing_code: body.pairing_code,
+      },
+    });
+  }
 
   return NextResponse.json({
     instance_id: instance.id,

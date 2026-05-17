@@ -25,6 +25,7 @@ import { Button } from "@/components/ui/button";
 import { AutoRefresh } from "@/components/auto-refresh";
 import { SignOutButton } from "@/components/sign-out-button";
 import { ThemeToggle } from "@/components/theme-toggle";
+import { ActivityTimeline } from "@/components/activity-timeline";
 
 // Genera un pairing code humano-friendly (8 chars, sin caracteres confusos).
 function generatePairingCode(): string {
@@ -43,6 +44,19 @@ export default async function FirmPage() {
 
   async function generatePairingTokenAction() {
     "use server";
+    // Validar quota antes de generar pairing — evita repartir códigos que el
+    // /api/v0/pair va a rechazar con 403. La validación final sigue estando
+    // en pair/route.ts (defensa en profundidad).
+    const [seatsUsed, fresh] = await Promise.all([
+      db.instance.count({ where: { firmId } }),
+      db.firm.findUnique({ where: { id: firmId }, select: { seatsPurchased: true } }),
+    ]);
+    if (!fresh) throw new Error("firm_not_found");
+    if (seatsUsed >= fresh.seatsPurchased) {
+      throw new Error(
+        `quota_full: ${seatsUsed}/${fresh.seatsPurchased} PCs. Contacta con soporte para ampliar tu plan.`,
+      );
+    }
     const code = generatePairingCode();
     await db.pairingToken.create({
       data: {
@@ -54,21 +68,37 @@ export default async function FirmPage() {
     revalidatePath("/firm");
   }
 
-  const firm = await db.firm.findUnique({
-    where: { id: firmId },
-    include: {
-      instances: {
-        orderBy: { createdAt: "desc" },
-      },
-      pairingTokens: {
-        where: {
-          usedAt: null,
-          expiresAt: { gt: new Date() },
+  const [firm, latestInstaller, recentActivity] = await Promise.all([
+    db.firm.findUnique({
+      where: { id: firmId },
+      include: {
+        instances: {
+          orderBy: { createdAt: "desc" },
         },
-        orderBy: { createdAt: "desc" },
+        pairingTokens: {
+          where: {
+            usedAt: null,
+            expiresAt: { gt: new Date() },
+          },
+          orderBy: { createdAt: "desc" },
+        },
       },
-    },
-  });
+    }),
+    db.stackBundle.findFirst({
+      where: {
+        kind: "INSTALLER",
+        channel: "stable",
+        deprecatedAt: null,
+      },
+      orderBy: { releasedAt: "desc" },
+      select: { version: true, sizeBytes: true },
+    }),
+    db.activity.findMany({
+      where: { firmId },
+      orderBy: { createdAt: "desc" },
+      take: 30,
+    }),
+  ]);
 
   if (!firm) {
     return (
@@ -84,6 +114,8 @@ export default async function FirmPage() {
       Date.now() - i.lastHeartbeatAt.getTime() < 3 * 60 * 1000,
   ).length;
 
+  const quotaFull = firm.instances.length >= firm.seatsPurchased;
+
   return (
     <main className="container-page min-h-screen py-8 sm:py-12 space-y-8">
       <AutoRefresh intervalMs={5_000} />
@@ -96,21 +128,61 @@ export default async function FirmPage() {
           </h1>
           <p className="text-sm text-muted-foreground">
             {session.user.email} · Plan {firm.plan} ·{" "}
-            <span className="tabular-nums">{firm.instances.length}</span>/
-            <span className="tabular-nums">{firm.seatsPurchased}</span>{" "}
-            instancias · <span className="tabular-nums">{onlineCount}</span>{" "}
-            online
+            <span
+              className={
+                quotaFull ? "tabular-nums text-red-600 font-semibold" : "tabular-nums"
+              }
+            >
+              {firm.instances.length}
+            </span>
+            /<span className="tabular-nums">{firm.seatsPurchased}</span>{" "}
+            instancias{quotaFull ? " (cupo lleno)" : ""} ·{" "}
+            <span className="tabular-nums">{onlineCount}</span> online
           </p>
         </div>
         <div className="flex items-center gap-2 self-start sm:self-auto">
+          <Link
+            href="/firm/usage"
+            className="h-10 px-3 inline-flex items-center text-sm rounded border bg-background hover:bg-paper-2"
+          >
+            Consumo
+          </Link>
+          <Link
+            href="/firm/users"
+            className="h-10 px-3 inline-flex items-center text-sm rounded border bg-background hover:bg-paper-2"
+          >
+            Usuarios
+          </Link>
+          <Link
+            href="/firm/mcp"
+            className="h-10 px-3 inline-flex items-center text-sm rounded border bg-background hover:bg-paper-2"
+          >
+            MCP
+          </Link>
+          <Link
+            href="/firm/settings"
+            className="h-10 px-3 inline-flex items-center text-sm rounded border bg-background hover:bg-paper-2"
+          >
+            Ajustes
+          </Link>
           <form action={generatePairingTokenAction}>
             <Button
               type="submit"
               className="h-10 px-4"
-              style={{
-                backgroundColor: "var(--brand)",
-                color: "var(--brand-foreground)",
-              }}
+              disabled={quotaFull}
+              title={
+                quotaFull
+                  ? "Cupo lleno: amplía el plan o desempareja un PC en desuso primero"
+                  : undefined
+              }
+              style={
+                quotaFull
+                  ? undefined
+                  : {
+                      backgroundColor: "var(--brand)",
+                      color: "var(--brand-foreground)",
+                    }
+              }
             >
               + Añadir trabajador
             </Button>
@@ -124,37 +196,67 @@ export default async function FirmPage() {
         <Card className="card-paper border-0 shadow-none p-0">
           <CardHeader className="px-6 pt-6">
             <CardTitle className="font-display text-xl">
-              Pairing codes activos
+              Alta de trabajador
             </CardTitle>
             <CardDescription>
-              Pasa el código al trabajador. Caduca 10 min después de generarse.
+              Pasa al trabajador el enlace de descarga + su código. El
+              installer le pide el código en el wizard.
             </CardDescription>
           </CardHeader>
-          <CardContent className="px-2 sm:px-4 pb-4">
-            <div className="flex flex-wrap gap-2 px-4">
-              {firm.pairingTokens.map((t) => {
-                const minsLeft = Math.max(
-                  0,
-                  Math.round((t.expiresAt.getTime() - Date.now()) / 60000),
-                );
-                return (
-                  <div
-                    key={t.id}
-                    className="card-quiet px-4 py-3 flex items-center gap-3"
-                    style={{
-                      background:
-                        "linear-gradient(135deg, var(--brand-soft) 0%, transparent 100%)",
-                    }}
+          <CardContent className="px-6 pb-6 space-y-4">
+            {latestInstaller ? (
+              <div className="card-quiet p-4 space-y-2">
+                <div className="eyebrow text-[10px]">1. Descarga el installer</div>
+                <div className="text-sm">
+                  <a
+                    href="/api/v0/installer?channel=stable"
+                    className="font-mono text-sm underline"
                   >
-                    <span className="font-mono text-lg font-semibold tracking-[0.15em]">
-                      {t.code}
-                    </span>
-                    <span className="text-xs text-muted-foreground">
-                      caduca en {minsLeft} min
-                    </span>
-                  </div>
-                );
-              })}
+                    /api/v0/installer?channel=stable
+                  </a>
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  v{latestInstaller.version} ·{" "}
+                  {(latestInstaller.sizeBytes / 1024 / 1024).toFixed(1)} MB ·
+                  Windows · sin firma (verá un aviso de SmartScreen la primera
+                  vez)
+                </p>
+              </div>
+            ) : (
+              <div className="card-quiet p-4">
+                <p className="text-xs text-muted-foreground">
+                  Aún no hay installer publicado. Pide al operator que suba un
+                  release (ver <code>scripts/release-installer.ts</code>).
+                </p>
+              </div>
+            )}
+            <div className="space-y-2">
+              <div className="eyebrow text-[10px]">2. Códigos activos</div>
+              <div className="flex flex-wrap gap-2">
+                {firm.pairingTokens.map((t) => {
+                  const minsLeft = Math.max(
+                    0,
+                    Math.round((t.expiresAt.getTime() - Date.now()) / 60000),
+                  );
+                  return (
+                    <div
+                      key={t.id}
+                      className="card-quiet px-4 py-3 flex items-center gap-3"
+                      style={{
+                        background:
+                          "linear-gradient(135deg, var(--brand-soft) 0%, transparent 100%)",
+                      }}
+                    >
+                      <span className="font-mono text-lg font-semibold tracking-[0.15em]">
+                        {t.code}
+                      </span>
+                      <span className="text-xs text-muted-foreground">
+                        caduca en {minsLeft} min
+                      </span>
+                    </div>
+                  );
+                })}
+              </div>
             </div>
           </CardContent>
         </Card>
@@ -240,6 +342,22 @@ export default async function FirmPage() {
               </Table>
             </div>
           )}
+        </CardContent>
+      </Card>
+
+      <Card className="card-paper border-0 shadow-none p-0">
+        <CardHeader className="px-6 pt-6">
+          <CardTitle className="font-display text-xl">Actividad reciente</CardTitle>
+          <CardDescription>
+            Últimos eventos en tu equipo: altas, comandos remotos, baselines,
+            cambios de configuración.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="px-6 pb-6">
+          <ActivityTimeline
+            activities={recentActivity}
+            emptyMessage="Aún no hay actividad registrada en tu firma."
+          />
         </CardContent>
       </Card>
     </main>

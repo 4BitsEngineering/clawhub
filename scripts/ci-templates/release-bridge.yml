@@ -1,0 +1,72 @@
+name: Release bridge bundle to clawhub
+
+env:
+  KIND: BRIDGE
+  CHANNEL: stable
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Derive version from tag
+        id: ver
+        run: |
+          VERSION="${GITHUB_REF_NAME#v}"
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+
+      - name: Pack tarball
+        id: pack
+        run: |
+          NAME="bridge-${{ steps.ver.outputs.version }}.tar.gz"
+          tar -czf "$NAME" \
+            --exclude=".git" \
+            --exclude="node_modules" \
+            --exclude=".next" \
+            --exclude="dist" \
+            --exclude="state" \
+            --exclude="*.log" \
+            .
+          SHA=$(sha256sum "$NAME" | cut -d' ' -f1)
+          SIZE=$(stat -c%s "$NAME")
+          echo "name=$NAME" >> "$GITHUB_OUTPUT"
+          echo "sha256=$SHA" >> "$GITHUB_OUTPUT"
+          echo "size=$SIZE" >> "$GITHUB_OUTPUT"
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: ${{ steps.pack.outputs.name }}
+          tag_name: ${{ github.ref_name }}
+          generate_release_notes: true
+
+      - name: Register bundle in clawhub
+        run: |
+          URL="https://github.com/${{ github.repository }}/releases/download/${{ github.ref_name }}/${{ steps.pack.outputs.name }}"
+          curl -fsS -X POST "${{ secrets.CLAWHUB_URL }}/api/v0/bundles/register" \
+            -H "Authorization: Bearer ${{ secrets.CLAWHUB_API_KEY }}" \
+            -H "Content-Type: application/json; charset=utf-8" \
+            -d "$(cat <<EOF
+          {
+            "kind": "${{ env.KIND }}",
+            "version": "${{ steps.ver.outputs.version }}",
+            "channel": "${{ env.CHANNEL }}",
+            "sha256": "${{ steps.pack.outputs.sha256 }}",
+            "downloadUrl": "$URL",
+            "sizeBytes": ${{ steps.pack.outputs.size }},
+            "sourceCommit": "${{ github.sha }}",
+            "publishedBy": "github-actions"
+          }
+          EOF
+          )"

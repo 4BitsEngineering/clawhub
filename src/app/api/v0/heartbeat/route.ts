@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { db } from "@/lib/db";
 import { hashToken } from "@/lib/tokens";
+import { InstanceCommandStatus } from "@/generated/prisma/client";
 
 const HeartbeatBody = z.object({
   instance_id: z.string().uuid(),
@@ -48,8 +49,11 @@ export async function POST(req: NextRequest) {
   }
 
   const now = new Date();
-  await db.$transaction([
-    db.heartbeat.create({
+
+  // Heartbeat + Instance update + sweep de comandos expirados + fetch +
+  // dispatch atómico de los pendientes en una sola transacción.
+  const commandsToDispatch = await db.$transaction(async (tx) => {
+    await tx.heartbeat.create({
       data: {
         instanceId: instance.id,
         receivedAt: now,
@@ -60,19 +64,73 @@ export async function POST(req: NextRequest) {
         lastError: body.last_error ?? null,
         rawPayload: body as unknown as object,
       },
-    }),
-    db.instance.update({
+    });
+    // Si el cliente reporta stack_versions, los denormalizamos en Instance
+    // para que la UI haga diff rápido vs el manifest pinneado. Aceptamos
+    // missing fields (null) — significa que el cliente todavía no ha
+    // bootstrappeado esa capa.
+    const stackVersions =
+      (body.extras as { stack_versions?: {
+        openclaw?: string | null;
+        bridge?: string | null;
+        overlay?: { overlayId?: string | null; version?: string | null } | null;
+      } } | undefined)?.stack_versions;
+
+    const instanceUpdate: Record<string, unknown> = {
+      lastHeartbeatAt: now,
+      version: body.version ?? instance.version,
+    };
+    if (stackVersions !== undefined) {
+      instanceUpdate.runningOpenclawVersion = stackVersions.openclaw ?? null;
+      instanceUpdate.runningBridgeVersion = stackVersions.bridge ?? null;
+      instanceUpdate.runningOverlayId = stackVersions.overlay?.overlayId ?? null;
+      instanceUpdate.runningOverlayVersion = stackVersions.overlay?.version ?? null;
+    }
+
+    await tx.instance.update({
       where: { id: instance.id },
-      data: {
-        lastHeartbeatAt: now,
-        version: body.version ?? instance.version,
+      data: instanceUpdate,
+    });
+
+    // Sweep lazy: cualquier PENDING / DISPATCHED cuyo expiresAt ya pasó.
+    await tx.instanceCommand.updateMany({
+      where: {
+        instanceId: instance.id,
+        status: { in: [InstanceCommandStatus.PENDING, InstanceCommandStatus.DISPATCHED] },
+        expiresAt: { lt: now },
       },
-    }),
-  ]);
+      data: { status: InstanceCommandStatus.EXPIRED, completedAt: now },
+    });
+
+    // Fetch PENDING vivos.
+    const pending = await tx.instanceCommand.findMany({
+      where: {
+        instanceId: instance.id,
+        status: InstanceCommandStatus.PENDING,
+        expiresAt: { gte: now },
+      },
+      orderBy: { createdAt: "asc" },
+      take: 20,
+    });
+
+    if (pending.length > 0) {
+      await tx.instanceCommand.updateMany({
+        where: { id: { in: pending.map((c) => c.id) } },
+        data: { status: InstanceCommandStatus.DISPATCHED, dispatchedAt: now },
+      });
+    }
+
+    return pending;
+  });
 
   return NextResponse.json({
     ok: true,
     next_heartbeat_in_s: 60,
-    commands: [],
+    commands: commandsToDispatch.map((c) => ({
+      id: c.id,
+      kind: c.kind,
+      args: c.args ?? null,
+      expires_at: c.expiresAt.toISOString(),
+    })),
   });
 }

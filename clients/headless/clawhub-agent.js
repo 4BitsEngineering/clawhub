@@ -38,6 +38,9 @@
 const fs = require('node:fs');
 const path = require('node:path');
 const os = require('node:os');
+const { fetchJson } = require('../shared/http');
+const { processCommands } = require('../shared/dispatcher');
+const { syncUsage } = require('../shared/usage-sync');
 
 // -------------------------------------------------------------------------
 // Config
@@ -101,20 +104,6 @@ function deleteConfig() {
   try { fs.unlinkSync(CONFIG_PATH); } catch {}
 }
 
-async function fetchJson(url, opts, timeoutMs) {
-  const ac = new AbortController();
-  const t = setTimeout(() => ac.abort(), timeoutMs);
-  try {
-    const res = await fetch(url, { ...opts, signal: ac.signal });
-    const text = await res.text();
-    let body = null;
-    try { body = text ? JSON.parse(text) : null; } catch {}
-    return { ok: res.ok, status: res.status, body, raw: text };
-  } finally {
-    clearTimeout(t);
-  }
-}
-
 // -------------------------------------------------------------------------
 // Pair
 // -------------------------------------------------------------------------
@@ -126,7 +115,7 @@ async function pair(code) {
     url,
     {
       method: 'POST',
-      headers: { 'content-type': 'application/json' },
+      headers: { 'content-type': 'application/json; charset=utf-8' },
       body: JSON.stringify({
         pairing_code: code,
         worker_label: WORKER_LABEL,
@@ -151,6 +140,54 @@ async function pair(code) {
 // -------------------------------------------------------------------------
 // Probe local bridge
 // -------------------------------------------------------------------------
+
+async function probeLocalMcp() {
+  if (!BRIDGE_URL) return null;
+  const fetchSafe = async (path, timeoutMs = PROBE_TIMEOUT_MS) => {
+    try {
+      const r = await fetchJson(`${BRIDGE_URL}${path}`, {}, timeoutMs);
+      return r;
+    } catch {
+      return null;
+    }
+  };
+  const [manifestRes, configRes] = await Promise.all([
+    fetchSafe('/api/mcp'),
+    fetchSafe('/api/mcp/config-applied', 2500),
+  ]);
+
+  if (!manifestRes) return null;
+  if (!manifestRes.ok) {
+    return { available: false, status: manifestRes.status, probed_at: new Date().toISOString() };
+  }
+  const data = manifestRes.body;
+  const servers = Array.isArray(data?.servers)
+    ? data.servers.map((s) => ({
+        name: s.name ?? s.id ?? null,
+        ready: !!(s.ready ?? s.status === 'ready'),
+        toolCount: typeof s.toolCount === 'number' ? s.toolCount : (Array.isArray(s.tools) ? s.tools.length : null),
+        transport: s.transport ?? null,
+        error: s.error ?? null,
+      }))
+    : null;
+
+  let configApplied = null;
+  if (configRes?.ok && configRes.body?.available) {
+    configApplied = {
+      servers: configRes.body.servers ?? {},
+      count: configRes.body.count ?? 0,
+    };
+  }
+
+  return {
+    available: true,
+    ready: data?.counts?.ready ?? data?.ready ?? null,
+    total: data?.counts?.servers ?? data?.total ?? null,
+    servers,
+    config_applied: configApplied,
+    probed_at: new Date().toISOString(),
+  };
+}
 
 async function probeLocalStack() {
   if (!BRIDGE_URL) return null;
@@ -208,18 +245,26 @@ async function heartbeat(cfg) {
   const uptimeS = Math.floor((Date.now() - startedAt) / 1000);
 
   let localStack = null;
+  let localMcp = null;
   try {
-    localStack = await probeLocalStack();
+    [localStack, localMcp] = await Promise.all([
+      probeLocalStack(),
+      probeLocalMcp(),
+    ]);
   } catch (err) {
     log('error', `probe failed: ${err.message}`);
   }
+
+  const extras = {};
+  if (localStack) extras.local_stack = localStack;
+  if (localMcp) extras.mcp = localMcp;
 
   const resp = await fetchJson(
     url,
     {
       method: 'POST',
       headers: {
-        'content-type': 'application/json',
+        'content-type': 'application/json; charset=utf-8',
         authorization: `Bearer ${cfg.instance_token}`,
       },
       body: JSON.stringify({
@@ -227,7 +272,7 @@ async function heartbeat(cfg) {
         version: CLIENT_VERSION,
         uptime_s: uptimeS,
         ram_mb: Math.round(mem.rss / 1024 / 1024),
-        extras: localStack ? { local_stack: localStack } : undefined,
+        extras: Object.keys(extras).length > 0 ? extras : undefined,
       }),
     },
     HEARTBEAT_TIMEOUT_MS,
@@ -253,6 +298,48 @@ async function heartbeat(cfg) {
   } else {
     log('info', `♥  heartbeat OK · bridge unreachable · uptime ${uptimeS}s`);
   }
+
+  const env = buildEnv(cfg);
+  const logger = {
+    info: (...a) => log('info', ...a),
+    error: (...a) => log('error', ...a),
+  };
+
+  // Procesa comandos pendientes que el clawhub nos dispatchó en este beat.
+  // No bloquea el siguiente heartbeat — si los comandos tardan más que el
+  // intervalo, se solapan; cada uno reporta cuando termina.
+  if (resp.body?.commands?.length > 0) {
+    processCommands(env, resp.body.commands, logger).catch((err) =>
+      log('error', `processCommands: ${err.message}`),
+    );
+  }
+
+  // Forward usage spans del bridge al control plane. Best-effort: si bridge
+  // o clawhub no responden, este tick lo deja para el próximo. No bloquea.
+  syncUsage(env, cfg, saveConfig, logger)
+    .then((r) => {
+      if (r?.error) log('error', `usage sync: ${r.error}`);
+      else if (r?.accepted || r?.deduped) {
+        log('info', `usage: ${r.accepted || 0} new, ${r.deduped || 0} deduped → ${r.lastSeen}`);
+      }
+    })
+    .catch((err) => log('error', `syncUsage threw: ${err.message}`));
+}
+
+function buildEnv(cfg) {
+  return {
+    clawhubUrl: CLAWHUB_URL,
+    bridgeUrl: BRIDGE_URL,
+    clientVersion: CLIENT_VERSION,
+    workerLabel: WORKER_LABEL,
+    startedAt,
+    instanceToken: cfg.instance_token,
+    // El headless puede ejecutar `apply_stack_update` para descargar bundles,
+    // pero NO restartea gateway/bridge (no los gestiona). El dispatcher
+    // reportará "supervisor required to activate" tras la descarga.
+    stackBaseDir: path.join(path.dirname(CONFIG_PATH), 'stack'),
+    // restartRuntime intencionalmente omitido — headless no orquesta runtime.
+  };
 }
 
 // -------------------------------------------------------------------------

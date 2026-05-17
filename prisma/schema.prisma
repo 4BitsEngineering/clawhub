@@ -86,10 +86,29 @@ model Firm {
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt
 
+  // Stack manifest — versiones canónicas que esta firma debe correr en
+  // todos sus PCs. NULL = "última stable" (clawhub elige). Strings explícitas
+  // permiten pinning por firma (rollouts staged, A/B test, hold-back).
+  // El overlay identifica el repo (asesoria, ai-office, content, etc.); la
+  // versión identifica el release de ese repo.
+  openclawVersion  String?
+  bridgeVersion    String?
+  overlayId        String?  // "asesoria" | "ai-office" | "content" | ...
+  overlayVersion   String?
+  // Auto-aplicar updates al detectarlos. Si false, el admin debe pulsar
+  // "Aplicar" manualmente desde la UI clawhub.
+  stackAutoUpdate  Boolean  @default(false)
+  // Canal de releases — stable es default; beta para pre-releases.
+  stackChannel     String   @default("stable")
+
   users         User[]
   instances     Instance[]
   pairingTokens PairingToken[]
   skills        Skill[]
+  baselines     FirmBaseline[]
+  activities    Activity[]
+  invitations   Invitation[]
+  mcpInstalls   FirmMcpInstall[]
 }
 
 enum FirmPlan {
@@ -111,7 +130,20 @@ model Instance {
   lastHeartbeatAt   DateTime?
   createdAt         DateTime  @default(now())
 
+  // Versiones del stack actualmente corriendo en el PC (último heartbeat).
+  // Pueden divergir del manifest pinneado en Firm.openclawVersion/etc. La UI
+  // muestra ese diff y permite encolar apply_stack_update para sincronizar.
+  // NULL = aún no se ha bootstrappeado el stack desde clawhub (instancia
+  // recién paireada, o cliente legacy sin manifest support).
+  runningOpenclawVersion String?
+  runningBridgeVersion   String?
+  runningOverlayId       String?
+  runningOverlayVersion  String?
+
   heartbeats Heartbeat[]
+  commands   InstanceCommand[]
+  usageRecords UsageRecord[]
+  activities Activity[]
 
   @@index([firmId])
   @@index([lastHeartbeatAt])
@@ -141,10 +173,15 @@ model PairingToken {
   code      String    @unique
   expiresAt DateTime
   usedAt    DateTime?
+  // Si NULL → primer pairing, crea Instance nueva.
+  // Si presente → re-pair: el endpoint /api/v0/pair conserva esta instance_id
+  // y solo rota el instance_token. Útil cuando el worker reinstaló su PC.
+  existingInstanceId String?
   createdAt DateTime  @default(now())
 
   @@index([firmId])
   @@index([code])
+  @@index([existingInstanceId])
 }
 
 /**
@@ -174,4 +211,379 @@ model Skill {
   @@unique([firmId, slug])
   @@index([firmId])
   @@index([firmId, active])
+}
+
+/**
+ * InstanceCommand — orden de actuación remota encolada desde clawhub para
+ * que la ejecute el headless agent en el PC del trabajador.
+ *
+ * Flujo:
+ *   1. Operator/firm_admin encola un command desde la UI (status=PENDING).
+ *   2. En el siguiente heartbeat, el endpoint /api/v0/heartbeat devuelve
+ *      todos los commands PENDING de esa instance en `commands: [...]` y
+ *      los marca DISPATCHED + dispatchedAt en la misma transacción.
+ *   3. El agent ejecuta cada uno y reporta vía POST /api/v0/commands/[id]/result
+ *      con { status: "completed"|"failed", result?: any, error?: string }.
+ *   4. Un sweep periódico (lazy, en el propio heartbeat) marca como EXPIRED
+ *      cualquiera que pase su expiresAt sin haber sido completado.
+ *
+ * kind es un string libre (no enum) para no requerir migración cada vez
+ * que añadimos un comando nuevo. Validación lógica en el agent.
+ */
+model InstanceCommand {
+  id           String                @id @default(uuid())
+  instanceId   String
+  instance     Instance              @relation(fields: [instanceId], references: [id], onDelete: Cascade)
+  kind         String                // "ping" | "reload_skills" | "reset_to_baseline" | ...
+  args         Json?
+  status       InstanceCommandStatus @default(PENDING)
+  result       Json?
+  errorMessage String?
+  createdBy    String?               // userId que lo encoló (null si automatizado)
+  createdAt    DateTime              @default(now())
+  dispatchedAt DateTime?
+  completedAt  DateTime?
+  expiresAt    DateTime
+
+  @@index([instanceId, status])
+  @@index([instanceId, createdAt])
+}
+
+enum InstanceCommandStatus {
+  PENDING
+  DISPATCHED
+  COMPLETED
+  FAILED
+  EXPIRED
+}
+
+/**
+ * FirmBaseline — snapshot canónico de la configuración de un overlay para una
+ * firma. Sirve como punto de restauración: el admin lo aplica a una instancia
+ * vía el comando `reset_to_baseline` y deja el PC del trabajador en el estado
+ * exacto que tenía cuando se generó este baseline.
+ *
+ * Cada firma puede tener varios baselines (v1, v2, …). El admin elige cuál
+ * promover como "el bueno actual" — clawhub no asume nada sobre eso todavía.
+ *
+ * Lo que entra en un baseline (categories): OPENCLAW_CONFIG (openclaw.json),
+ * SKILL (directorio de skills), WORKSPACE (agents/workspaces/*), ENTERPRISE
+ * (enterprise/*.md). .env quedará FUERA del MVP — secrets sensibles del worker
+ * no deben viajar a clawhub.
+ */
+model FirmBaseline {
+  id          String   @id @default(uuid())
+  firmId      String
+  firm        Firm     @relation(fields: [firmId], references: [id], onDelete: Cascade)
+  version     Int      // se incrementa por firma; (firmId, version) único
+  label       String   // "Setup inicial demo", "post-onboarding mayo"
+  description String?
+  // Telemetría útil sin tener que recorrer files
+  fileCount   Int      @default(0)
+  totalBytes  Int      @default(0)
+  createdBy   String?  // userId que generó el snapshot
+  // instanceId de la instancia que sirvió como fuente del snapshot.
+  // Útil para auditoría: "este baseline salió del PC de Carlos en mayo".
+  sourceInstanceId String?
+  // Baseline "canónico" actual de la firma. Solo uno puede estar promoted por
+  // firma a la vez (enforced en la mutación, no en schema porque cambia
+  // mucho). Cuando el firm_admin pulsa "Reset" sin elegir baseline, se usa
+  // este por defecto. NULL en el rest.
+  isPromoted  Boolean  @default(false)
+  promotedAt  DateTime?
+  promotedBy  String?  // userId que promovió
+  createdAt   DateTime @default(now())
+
+  files FirmBaselineFile[]
+
+  @@unique([firmId, version])
+  @@index([firmId, createdAt])
+  @@index([firmId, isPromoted])
+}
+
+model FirmBaselineFile {
+  id         String                    @id @default(uuid())
+  baselineId String
+  baseline   FirmBaseline              @relation(fields: [baselineId], references: [id], onDelete: Cascade)
+  // Path relativo al raíz del overlay (NO absoluto). Ejemplos:
+  //   "openclaw.json"
+  //   "agents/workspaces/corp-planner-v1/AGENTS.md"
+  //   "skills/oposicion-redactar-tema/SKILL.md"
+  //   "enterprise/STANDARDS.md"
+  path       String
+  category   FirmBaselineFileCategory
+  sha256     String
+  sizeBytes  Int
+  // Contenido. Para texto: utf8 plano. Para binarios: base64.
+  // Cap implícito ~1MB por archivo (asumimos solo md+json, no binarios reales).
+  content    String
+  isBinary   Boolean                   @default(false)
+
+  @@unique([baselineId, path])
+  @@index([baselineId])
+}
+
+enum FirmBaselineFileCategory {
+  OPENCLAW_CONFIG  // openclaw.json
+  SKILL            // skills/*/SKILL.md + sus extras
+  WORKSPACE        // agents/workspaces/<id>/*.md
+  ENTERPRISE       // enterprise/*.md
+  OTHER            // colchón para extensiones futuras (.env si decidimos incluirlo, etc.)
+}
+
+/**
+ * UsageRecord — un span (turno de agente) consumido por una instancia.
+ * Lo persiste el bridge en trace_spans con datos autoritativos del proveedor
+ * (extraídos de la sesión jsonl de openclaw, no estimados), y el agent
+ * headless los sube periódicamente a clawhub.
+ *
+ * Identidad: `spanId` viene del bridge (trace_spans.id, UUID), único global.
+ * Combinado con `instanceId` da la deduplicación natural — el agent puede
+ * reintentar mandando el mismo span y no se duplica.
+ *
+ * Granularidad: 1 fila por turno de agente. Una llamada de chat típica
+ * suele dar 1-3 turnos (planner → sub-agents). Una tarea larga puede dar
+ * decenas. Mejor que metric-per-call porque ya viene agregado por el
+ * bridge en costUsd/tokens y mantiene un identificador estable.
+ *
+ * Pricing: `costUsd` viene calculado por el bridge usando la tabla de
+ * pricing del modelo. Si más adelante queremos margen distinto a clawhub
+ * (e.g. cobrar 1.3× a la firma), eso se aplica downstream — esta fila
+ * guarda el coste mayorista.
+ */
+model UsageRecord {
+  // spanId del bridge + instanceId — únicos juntos. Usamos id auto-generado
+  // como PK para que upsert sea cómodo via @@unique.
+  id            String   @id @default(uuid())
+  spanId        String   // bridge trace_spans.id
+  instanceId    String
+  instance      Instance @relation(fields: [instanceId], references: [id], onDelete: Cascade)
+  firmId        String   // denormalizado para queries rápidas firma-wide
+  agentId       String   // p.ej. corp-planner-v1, office-executive-v1
+  runId         String?  // bridge runId — útil para correlar entre spans
+  taskLabel     String?  // TASK-XXX del bridge si lo hay
+  model         String?  // claude-sonnet-4-6, mimo-v2-pro, etc.
+  provider      String?  // axet, anthropic, ollama, openai, …
+  status        String?  // done | error | timeout
+  inputTokens   Int?
+  outputTokens  Int?
+  cacheReadTokens  Int?
+  cacheWriteTokens Int?
+  costUsd       Float?   // coste mayorista calculado por bridge
+  turnCount     Int?
+  tokensSource  String?  // 'real' | 'estimated'
+  startTime     DateTime
+  endTime       DateTime
+  durationMs    Int?
+  createdAt     DateTime @default(now())
+
+  @@unique([instanceId, spanId])
+  @@index([firmId, endTime])
+  @@index([instanceId, endTime])
+  @@index([firmId, agentId, endTime])
+}
+
+/**
+ * StackBundle — un release versionado de una de las capas del stack que el
+ * cliente desktop descarga y aplica. Sirve como "package manager" propio:
+ * el cliente compara su version local contra el manifest de la firma, baja
+ * el bundle nuevo si hay diff, lo descomprime, restart.
+ *
+ * Tipos (kind):
+ *   - OPENCLAW: runtime gateway+cli (release del npm openclaw)
+ *   - BRIDGE: autonomous-agents bridge (release nuestro)
+ *   - OVERLAY: asesoria, ai-office, content-generation, marketing, temarios.
+ *     `overlayId` identifica cuál (NULL para OPENCLAW/BRIDGE).
+ *
+ * downloadUrl puede ser:
+ *   - Supabase Storage signed URL (default, ver lib/storage.ts)
+ *   - URL externa (CDN propio, GitHub release, etc.)
+ *
+ * sha256 obligatorio — el cliente verifica integridad antes de extraer.
+ *
+ * channel: stable | beta | dev. La firma elige su canal en Firm.stackChannel
+ * y el endpoint /api/v0/stack-manifest filtra por ese canal.
+ */
+model StackBundle {
+  id           String           @id @default(uuid())
+  kind         StackBundleKind
+  overlayId    String?          // solo para kind=OVERLAY
+  version      String           // e.g. "1.41.5", "2026.5.16"
+  channel      String           @default("stable")
+  sha256       String
+  downloadUrl  String
+  sizeBytes    Int
+  releaseNotes String?
+  // Metadata útil para releases reproducibles.
+  sourceCommit String?          // git SHA del que se generó
+  buildLog     String?          // log de quien lo subió (CLI script)
+  publishedBy  String?          // userId que ejecutó release
+  releasedAt   DateTime         @default(now())
+  // Soft delete — no borrar bundles porque hay PCs corriéndolos.
+  deprecatedAt DateTime?
+
+  @@unique([kind, overlayId, version, channel])
+  @@index([kind, channel, releasedAt])
+  @@index([overlayId, channel, releasedAt])
+}
+
+enum StackBundleKind {
+  OPENCLAW   // openclaw npm runtime
+  BRIDGE     // autonomous-agents bridge
+  OVERLAY    // overlay: asesoria, ai-office, content, marketing, temarios
+  INSTALLER  // clawgents-desktop .exe (Windows installer, distribución a workers)
+}
+
+/**
+ * McpServerCatalog — catálogo curado de Model Context Protocol servers
+ * disponibles para instalación firma-wide. Mantenido por operator (no por
+ * cada firma) — actúa como "app store" interno.
+ *
+ * Cuando una firma "instala" uno, se crea un FirmMcpInstall que el cliente
+ * desktop materializa en su `openclaw.json` vía el comando `push_mcp_config`.
+ *
+ * `transport`:
+ *   - stdio: el servidor se lanza como subprocess (e.g. npm/uvx package)
+ *   - http: servidor remoto HTTP (URL configurable)
+ *   - sse: server-sent events
+ *
+ * `requiredEnvVars` lista las variables necesarias para que funcione (e.g.
+ * GITHUB_TOKEN, SLACK_BOT_TOKEN). Si están vacías, el server arranca sin
+ * configuración extra. La gestión real de secrets se hace en el PC del
+ * worker (clawhub solo conoce los NOMBRES de las vars, no sus valores).
+ */
+model McpServerCatalog {
+  id              String             @id @default(uuid())
+  slug            String             @unique // "filesystem", "github", "slack"
+  displayName     String             // "Filesystem", "GitHub", "Slack"
+  description     String
+  category        String             // "fs" | "vcs" | "messaging" | "db" | "search" | "browser" | "other"
+  transport       String             // "stdio" | "http" | "sse"
+  // Para transport=stdio: cómo lanzar el server (e.g. "npx @modelcontextprotocol/server-filesystem")
+  // Para transport=http/sse: la URL base
+  launchCommand   String?
+  launchArgs      Json?              // string[] con args extra (e.g. ["--root", "/home"])
+  npmPackage      String?            // "@modelcontextprotocol/server-filesystem"
+  requiredEnvVars Json?              // string[] — vars que el worker debe configurar
+  // Args que el firm_admin puede customizar al instalar (e.g. la ruta raíz
+  // para filesystem). Cada entry: { key, label, type, default, required }.
+  configurableArgs Json?
+  docsUrl         String?
+  iconEmoji       String?            // "📁" "🐙" "💬" para UI
+  isOfficial      Boolean            @default(false) // mantenido por anthropic/community
+  deprecatedAt    DateTime?
+  createdAt       DateTime           @default(now())
+  updatedAt       DateTime           @updatedAt
+
+  installs        FirmMcpInstall[]
+
+  @@index([category])
+  @@index([deprecatedAt])
+}
+
+/**
+ * FirmMcpInstall — una firma ha "instalado" un MCP server del catálogo. Es
+ * pure metadata: el material real (config en openclaw.json del worker) se
+ * envía vía el comando `push_mcp_config` que el agent ejecuta localmente.
+ *
+ * `configArgs` son los valores que el firm_admin eligió al instalar (e.g.
+ * para filesystem: { rootPath: "C:/Users/..." } ). Si vacío, defaults del
+ * catálogo.
+ *
+ * `enabled` toggle on/off sin desinstalar — el comando push_mcp_config
+ * respeta este flag cuando regenera openclaw.json.
+ */
+model FirmMcpInstall {
+  id          String           @id @default(uuid())
+  firmId      String
+  firm        Firm             @relation(fields: [firmId], references: [id], onDelete: Cascade)
+  catalogId   String
+  catalog     McpServerCatalog @relation(fields: [catalogId], references: [id], onDelete: Cascade)
+  enabled     Boolean          @default(true)
+  configArgs  Json?            // valores per-firma de configurableArgs del catalog
+  installedBy String?          // userId del firm_admin que lo instaló
+  installedAt DateTime         @default(now())
+  updatedAt   DateTime         @updatedAt
+
+  @@unique([firmId, catalogId])
+  @@index([firmId, enabled])
+}
+
+/**
+ * Activity — log universal de quién hizo qué en clawhub.
+ *
+ * Se escribe desde múltiples puntos del backend: pair, command queue,
+ * baselines, stack pinning, skill publish, instance delete, etc. La UI
+ * operator muestra timeline global; la UI firm filtra por firmId; la
+ * página de instancia filtra por instanceId.
+ *
+ * `kind` es libre (string), formato "<dominio>.<verbo>":
+ *   pair.success, pair.quota_blocked, instance.delete
+ *   command.create, command.complete, command.fail, command.expire
+ *   baseline.create, baseline.apply, baseline.delete
+ *   stack.pin, stack.bundle_publish, stack.apply
+ *   skill.publish, skill.disable
+ *   auth.signin
+ *
+ * `actorRole`: OPERATOR | FIRM_ADMIN | SYSTEM | INSTANCE
+ *   - SYSTEM: cron, sweep, automatización interna
+ *   - INSTANCE: el agent reporta resultados de comandos (no humano)
+ *
+ * `actorEmail` se snapshotea por si el User se elimina después — la activity
+ * debe seguir siendo auditable aunque la cuenta original ya no exista.
+ *
+ * onDelete: SetNull en firmId/instanceId para no perder histórico al borrar
+ * la firma/instancia.
+ */
+/**
+ * Invitation — invita a un usuario a unirse a clawhub con un rol concreto.
+ *
+ * Sin email provider real todavía: el creador (operator/firm_admin) comparte
+ * el link `/invite/<token>?email=<email>` por sus medios (Slack, WhatsApp,
+ * etc.). El destinatario abre, crea su cuenta y se asocia automáticamente a
+ * la firma+rol indicados.
+ *
+ * Reglas:
+ *   - Solo OPERATOR puede crear invites con role=OPERATOR.
+ *   - FIRM_ADMIN solo puede invitar a su propia firma como FIRM_ADMIN.
+ *   - Token URL-friendly (32 chars), único, expira en 7 días default.
+ *   - Idempotente: si el email ya tiene User, se sobreescribe firmId/role
+ *     SOLO si el invitador tiene permisos (no se puede degradar OPERATOR).
+ */
+model Invitation {
+  id           String    @id @default(uuid())
+  email        String
+  firmId       String?
+  firm         Firm?     @relation(fields: [firmId], references: [id], onDelete: Cascade)
+  role         UserRole  @default(FIRM_ADMIN)
+  token        String    @unique
+  expiresAt    DateTime
+  usedAt       DateTime?
+  usedByUserId String?
+  createdById  String?
+  createdAt    DateTime  @default(now())
+
+  @@index([firmId])
+  @@index([email])
+  @@index([token])
+}
+
+model Activity {
+  id         String    @id @default(uuid())
+  firmId     String?
+  firm       Firm?     @relation(fields: [firmId], references: [id], onDelete: SetNull)
+  instanceId String?
+  instance   Instance? @relation(fields: [instanceId], references: [id], onDelete: SetNull)
+  actorId    String?   // userId si es humano logueado
+  actorEmail String?   // snapshot del email para sobrevivir al borrado del User
+  actorRole  String?   // OPERATOR | FIRM_ADMIN | SYSTEM | INSTANCE
+  kind       String    // "<dominio>.<verbo>" — ver doc del modelo
+  summary    String    // texto humano para la UI ("Encoló reset_to_baseline en Carlos PC")
+  metadata   Json?     // detalles estructurados (command kind, baseline version, …)
+  createdAt  DateTime  @default(now())
+
+  @@index([firmId, createdAt])
+  @@index([instanceId, createdAt])
+  @@index([createdAt])
+  @@index([kind, createdAt])
 }

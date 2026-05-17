@@ -1,0 +1,144 @@
+/**
+ * Catálogo de comandos remotos que puede ejecutar el headless agent.
+ *
+ * Cada entrada define el zod schema de sus args y un display label para la
+ * UI. El kind es el string que se serializa en DB y se envía al agent.
+ *
+ * El agent también tiene su propio dispatcher local que valida lo que llega
+ * (defensa en profundidad). Si añades un kind aquí, añádelo allí también
+ * (clients/headless/clawhub-agent.js → executeCommand).
+ */
+import { z } from "zod";
+
+export const COMMAND_KINDS = {
+  ping: {
+    label: "Ping",
+    description: "Responde con un timestamp + info básica del agent. Útil para validar que el round-trip funciona.",
+    args: z.object({}).optional(),
+  },
+  reload_skills: {
+    label: "Recargar skills",
+    description: "Llama a POST /api/skills/sync del bridge local: re-escanea el directorio de skills del overlay y recarga el registry. Útil tras publicar una skill desde clawhub si el agent aún la usa cacheada.",
+    args: z.object({}).optional(),
+  },
+  fetch_logs: {
+    label: "Pedir logs",
+    description: "Descarga las últimas N líneas del log del bridge para soporte/debug remoto. Default 200 líneas, máximo 2000.",
+    args: z.object({
+      lines: z.number().int().min(1).max(2000).optional(),
+    }).optional(),
+  },
+  clear_cache: {
+    label: "Limpiar caches",
+    description: "Re-sincroniza skills + tools en el bridge: invalida caches internas y repula al gateway. Útil tras tocar disco a mano o ver agentes con allowlist desactualizada.",
+    args: z.object({}).optional(),
+  },
+  snapshot_config: {
+    label: "Pedir openclaw.json",
+    description: "Versión ligera de snapshot_to_baseline: descarga solo el openclaw.json (con tokens redactados) para inspeccionarlo. No genera baseline.",
+    args: z.object({}).optional(),
+  },
+  restart_bridge: {
+    label: "Reiniciar bridge",
+    description: "Mata el proceso del bridge en el PC del trabajador. Requiere que el bridge corra bajo un supervisor (Electron, systemd, NSSM) que lo respawnee. Sin supervisor, queda offline hasta arranque manual.",
+    args: z.object({}).optional(),
+  },
+  restart_gateway: {
+    label: "Reiniciar gateway",
+    description: "Intenta apagar el gateway local: primero por RPC system.shutdown si openclaw lo soporta, luego matando el PID del proceso openclaw. Requiere supervisor para revivir.",
+    args: z.object({}).optional(),
+  },
+  push_config_patch: {
+    label: "Cambiar configuración",
+    description: "Aplica cambios al openclaw.json del worker. Solo paths en allowlist (modelo, thinking, maxConcurrent, logging.level, skills.*.enabled, plugins.*.enabled). Backup automático + rollback si falla.",
+    args: z.object({
+      changes: z.record(z.string(), z.unknown()),
+    }),
+  },
+  apply_stack_update: {
+    label: "Aplicar update del stack",
+    description: "Re-evalúa el manifest de la firma, descarga las versiones nuevas de openclaw/bridge/overlay si las hay, y reinicia gateway+bridge para activarlas. Requiere desktop con supervisor; headless reportará 'supervisor required'.",
+    args: z.object({}).optional(),
+  },
+  snapshot_to_baseline: {
+    label: "Crear baseline desde esta instancia",
+    description: "Lee el estado actual del overlay (openclaw.json + workspaces + enterprise + skills) y lo sube a clawhub como nuevo baseline de la firma. NO incluye secrets (.env).",
+    args: z.object({
+      label: z.string().min(1).max(200),
+      description: z.string().max(2000).nullable().optional(),
+    }),
+  },
+  reset_to_baseline: {
+    label: "Restaurar a baseline",
+    description: "Descarga un baseline de clawhub y lo aplica al overlay local. Hace backup del estado actual antes. Preserva los MEMORY.md de cada agente (aprendizaje del trabajador no se pisa).",
+    args: z.object({
+      baseline_id: z.string().uuid(),
+    }),
+  },
+  reload_mcp: {
+    label: "Recargar MCP servers",
+    description: "Pide al bridge local que llame a npm run mcp:config (regenera el config) y reinicie los MCP servers para que recoja cambios. Idempotente. Útil tras editar configuraciones MCP sin tocar el openclaw.json.",
+    args: z.object({}).optional(),
+  },
+  push_mcp_config: {
+    label: "Sincronizar config MCP desde clawhub",
+    description: "Descarga la lista de MCP servers instalados/activos de esta firma desde clawhub (FirmMcpInstall + McpServerCatalog) y reescribe la sección mcpServers de openclaw.json local. Después corre mcp:config y recarga. NO toca secrets — solo metadata.",
+    args: z.object({}).optional(),
+  },
+} as const;
+
+export type CommandKind = keyof typeof COMMAND_KINDS;
+
+export const COMMAND_KIND_LIST = Object.keys(COMMAND_KINDS) as CommandKind[];
+
+export function isKnownKind(kind: string): kind is CommandKind {
+  return kind in COMMAND_KINDS;
+}
+
+export function validateArgs(kind: CommandKind, args: unknown): unknown {
+  const schema = COMMAND_KINDS[kind].args;
+  if (!schema) return args ?? null;
+  return schema.parse(args ?? undefined) ?? null;
+}
+
+/**
+ * TTL default: 1 hora. Si la instancia está offline más tiempo que eso, el
+ * comando expira automáticamente. Suficiente margen para que un PC apagado
+ * se encienda por la mañana, demasiado corto para que se queden colgados
+ * indefinidamente.
+ */
+export const COMMAND_DEFAULT_TTL_MS = 60 * 60 * 1000;
+
+/**
+ * Comandos disponibles para mass action (encolarlos a N PCs de golpe desde
+ * /operator/mass-actions). Solo se permiten kinds idempotentes y safe:
+ * los que no destruyen estado, no requieren args per-instance y no piden
+ * supervisor (restart_* sí lo pide pero se incluye porque es ocasionalmente
+ * necesario tras un cambio crítico — lleva doble confirm en UI).
+ *
+ * EXCLUIDOS deliberadamente:
+ *   - push_config_patch: cambio de config debe revisarse per-instance
+ *   - snapshot_to_baseline: generaría N baselines redundantes
+ *   - reset_to_baseline: peligroso, decisión per-instance
+ *   - fetch_logs: spam de payloads grandes
+ */
+export const MASS_ACTION_KINDS: CommandKind[] = [
+  "ping",
+  "reload_skills",
+  "clear_cache",
+  "apply_stack_update",
+  "snapshot_config",
+  "reload_mcp",
+  "push_mcp_config",
+  "restart_bridge",
+  "restart_gateway",
+];
+
+/**
+ * Kinds que requieren confirmación extra antes de ejecutar masivamente
+ * porque son disruptivos (proceso muere y depende de supervisor).
+ */
+export const MASS_ACTION_DESTRUCTIVE_KINDS: CommandKind[] = [
+  "restart_bridge",
+  "restart_gateway",
+];

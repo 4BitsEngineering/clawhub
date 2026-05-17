@@ -189,6 +189,18 @@ export default async function HomePage() {
             </div>
           </div>
         </section>
+
+        <footer className="flex flex-wrap items-center justify-center gap-x-4 gap-y-2 pt-6 border-t border-border text-xs text-muted-foreground">
+          <Link href="/legal/privacy" className="hover:underline">
+            Política de Privacidad
+          </Link>
+          <span>·</span>
+          <Link href="/legal/terms" className="hover:underline">
+            Términos de Servicio
+          </Link>
+          <span>·</span>
+          <span>© {new Date().getFullYear()} clawhub</span>
+        </footer>
       </div>
     </div>
   );

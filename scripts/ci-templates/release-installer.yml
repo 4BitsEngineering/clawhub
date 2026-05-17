@@ -1,0 +1,86 @@
+name: Release installer to clawhub
+
+env:
+  KIND: INSTALLER
+  CHANNEL: stable
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: windows-latest  # electron-builder NSIS solo en Windows
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - name: Derive version from tag
+        id: ver
+        shell: bash
+        run: |
+          VERSION="${GITHUB_REF_NAME#v}"
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+
+      - name: Install deps
+        run: npm ci
+
+      - name: Stage overlay assets
+        run: npm run prepare:build
+
+      - name: Build installer
+        run: npm run dist
+        env:
+          # Si en algún momento llega el cert OV, configura CSC_LINK + CSC_KEY_PASSWORD
+          # como repository secrets y descoméntalos en electron-builder.yml.
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Locate exe
+        id: locate
+        shell: bash
+        run: |
+          EXE=$(ls release/*.exe | head -1)
+          NAME=$(basename "$EXE")
+          SHA=$(sha256sum "$EXE" | cut -d' ' -f1)
+          SIZE=$(stat -c%s "$EXE")
+          echo "name=$NAME" >> "$GITHUB_OUTPUT"
+          echo "path=$EXE" >> "$GITHUB_OUTPUT"
+          echo "sha256=$SHA" >> "$GITHUB_OUTPUT"
+          echo "size=$SIZE" >> "$GITHUB_OUTPUT"
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: ${{ steps.locate.outputs.path }}
+          tag_name: ${{ github.ref_name }}
+          generate_release_notes: true
+
+      - name: Register installer in clawhub
+        shell: bash
+        run: |
+          URL="https://github.com/${{ github.repository }}/releases/download/${{ github.ref_name }}/${{ steps.locate.outputs.name }}"
+          curl -fsS -X POST "${{ secrets.CLAWHUB_URL }}/api/v0/bundles/register" \
+            -H "Authorization: Bearer ${{ secrets.CLAWHUB_API_KEY }}" \
+            -H "Content-Type: application/json; charset=utf-8" \
+            -d "$(cat <<EOF
+          {
+            "kind": "${{ env.KIND }}",
+            "version": "${{ steps.ver.outputs.version }}",
+            "channel": "${{ env.CHANNEL }}",
+            "sha256": "${{ steps.locate.outputs.sha256 }}",
+            "downloadUrl": "$URL",
+            "sizeBytes": ${{ steps.locate.outputs.size }},
+            "sourceCommit": "${{ github.sha }}",
+            "publishedBy": "github-actions"
+          }
+          EOF
+          )"

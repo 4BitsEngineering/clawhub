@@ -26,12 +26,22 @@ export const dynamic = "force-dynamic";
 
 export default async function OperatorPage() {
   const session = await requireOperator();
-  const firms = await db.firm.findMany({
-    orderBy: { createdAt: "desc" },
-    include: {
-      _count: { select: { instances: true, users: true } },
-    },
-  });
+  const [firms, recentAlerts] = await Promise.all([
+    db.firm.findMany({
+      orderBy: { createdAt: "desc" },
+      include: {
+        _count: { select: { instances: true, users: true } },
+      },
+    }),
+    db.activity.findMany({
+      where: {
+        kind: "instance.offline_alert",
+        createdAt: { gte: new Date(Date.now() - 24 * 60 * 60 * 1000) },
+      },
+      orderBy: { createdAt: "desc" },
+      take: 10,
+    }),
+  ]);
 
   const totalInstances = firms.reduce((sum, f) => sum + f._count.instances, 0);
   const totalSeats = firms.reduce((sum, f) => sum + f.seatsPurchased, 0);
@@ -51,6 +61,30 @@ export default async function OperatorPage() {
           </p>
         </div>
         <div className="flex items-center gap-2 self-start sm:self-auto">
+          <Link
+            href="/operator/activity"
+            className={buttonVariants({ variant: "secondary" }) + " h-10 px-4"}
+          >
+            Actividad
+          </Link>
+          <Link
+            href="/operator/mass-actions"
+            className={buttonVariants({ variant: "secondary" }) + " h-10 px-4"}
+          >
+            Mass actions
+          </Link>
+          <Link
+            href="/operator/mcp"
+            className={buttonVariants({ variant: "secondary" }) + " h-10 px-4"}
+          >
+            MCP
+          </Link>
+          <Link
+            href="/operator/stack"
+            className={buttonVariants({ variant: "secondary" }) + " h-10 px-4"}
+          >
+            Stack versions
+          </Link>
           <Link
             href="/operator/firms/new"
             className={buttonVariants() + " h-10 px-4"}
@@ -96,6 +130,50 @@ export default async function OperatorPage() {
           </div>
         </div>
       </div>
+
+      {recentAlerts.length > 0 && (
+        <Card className="card-paper border-0 shadow-none p-0">
+          <CardHeader className="px-6 pt-6">
+            <CardTitle className="font-display text-xl flex items-center gap-2">
+              <span>⚠️</span> {recentAlerts.length} alerta
+              {recentAlerts.length === 1 ? "" : "s"} de instancias offline
+            </CardTitle>
+            <CardDescription>
+              PCs sin heartbeat &gt;24h detectados por el sweep diario.
+              Verifica si el PC sigue activo o si hay que liberar el seat.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="px-6 pb-6">
+            <ul className="space-y-1">
+              {recentAlerts.map((a) => (
+                <li
+                  key={a.id}
+                  className="flex items-start gap-3 py-1.5 text-sm"
+                >
+                  <span className="mt-0.5 shrink-0">⌛</span>
+                  <div className="flex-1 min-w-0">
+                    <div>{a.summary}</div>
+                    <div className="text-xs text-muted-foreground">
+                      detectado {a.createdAt.toLocaleString("es-ES")}
+                      {a.instanceId && (
+                        <>
+                          {" · "}
+                          <Link
+                            href={`/firm/instances/${a.instanceId}`}
+                            className="underline"
+                          >
+                            ver PC
+                          </Link>
+                        </>
+                      )}
+                    </div>
+                  </div>
+                </li>
+              ))}
+            </ul>
+          </CardContent>
+        </Card>
+      )}
 
       <Card className="card-paper border-0 shadow-none p-0">
         <CardHeader className="px-6 pt-6">
