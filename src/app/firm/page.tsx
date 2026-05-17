@@ -26,6 +26,7 @@ import { AutoRefresh } from "@/components/auto-refresh";
 import { SignOutButton } from "@/components/sign-out-button";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { ActivityTimeline } from "@/components/activity-timeline";
+import { recordActivity } from "@/lib/activity";
 
 // Genera un pairing code humano-friendly (8 chars, sin caracteres confusos).
 function generatePairingCode(): string {
@@ -64,6 +65,50 @@ export default async function FirmPage() {
         code,
         expiresAt: new Date(Date.now() + 10 * 60 * 1000),
       },
+    });
+    revalidatePath("/firm");
+  }
+
+  // Acceso rápido al re-pair desde la tabla de instancias. Antes solo estaba
+  // en /firm/instances/[id] (card "Re-emparejar este PC"), pero cuando un PC
+  // está offline y hay que pasar el código por teléfono, entrar al detalle
+  // es un click extra que sobra. Misma lógica que el action del detail:
+  // cancela tokens vivos para esa instancia y genera uno nuevo de 10 min.
+  async function quickRepairTokenAction(formData: FormData) {
+    "use server";
+    const sess = await requireFirmAdmin();
+    const instanceId = String(formData.get("instance_id") ?? "");
+    if (!instanceId) throw new Error("instance_id_required");
+    const inst = await db.instance.findUnique({
+      where: { id: instanceId },
+      select: { id: true, firmId: true, workerLabel: true },
+    });
+    if (!inst || inst.firmId !== sess.user.firmId) {
+      throw new Error("forbidden");
+    }
+    await db.pairingToken.deleteMany({
+      where: {
+        firmId: inst.firmId,
+        existingInstanceId: inst.id,
+        usedAt: null,
+      },
+    });
+    const code = generatePairingCode();
+    await db.pairingToken.create({
+      data: {
+        firmId: inst.firmId,
+        code,
+        expiresAt: new Date(Date.now() + 10 * 60 * 1000),
+        existingInstanceId: inst.id,
+      },
+    });
+    await recordActivity({
+      kind: "instance.re_pair_initiated",
+      summary: `Generó código re-pair para "${inst.workerLabel}" (acceso rápido)`,
+      firmId: inst.firmId,
+      instanceId: inst.id,
+      actor: sess,
+      metadata: { code, source: "firm_dashboard" },
     });
     revalidatePath("/firm");
   }
@@ -108,10 +153,17 @@ export default async function FirmPage() {
     );
   }
 
+  // Single snapshot of "now" for the render. Server Components run once per
+  // request so the impurity is deterministic for this render. The
+  // react-hooks/purity rule flags any Date.now() — disabling here once
+  // is cleaner than peppering disables next to every relative-time math.
+  // eslint-disable-next-line react-hooks/purity
+  const nowMs = Date.now();
+
   const onlineCount = firm.instances.filter(
     (i) =>
       i.lastHeartbeatAt &&
-      Date.now() - i.lastHeartbeatAt.getTime() < 3 * 60 * 1000,
+      nowMs - i.lastHeartbeatAt.getTime() < 3 * 60 * 1000,
   ).length;
 
   const quotaFull = firm.instances.length >= firm.seatsPurchased;
@@ -158,6 +210,12 @@ export default async function FirmPage() {
             className="h-10 px-3 inline-flex items-center text-sm rounded border bg-background hover:bg-paper-2"
           >
             MCP
+          </Link>
+          <Link
+            href="/firm/baselines"
+            className="h-10 px-3 inline-flex items-center text-sm rounded border bg-background hover:bg-paper-2"
+          >
+            Baselines
           </Link>
           <Link
             href="/firm/settings"
@@ -236,7 +294,7 @@ export default async function FirmPage() {
                 {firm.pairingTokens.map((t) => {
                   const minsLeft = Math.max(
                     0,
-                    Math.round((t.expiresAt.getTime() - Date.now()) / 60000),
+                    Math.round((t.expiresAt.getTime() - nowMs) / 60000),
                   );
                   return (
                     <div
@@ -294,13 +352,31 @@ export default async function FirmPage() {
                     <TableHead className="eyebrow text-[10px]">
                       Último heartbeat
                     </TableHead>
+                    <TableHead className="eyebrow text-[10px] text-right">
+                      Acciones
+                    </TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
                   {firm.instances.map((i) => {
                     const isOnline =
                       i.lastHeartbeatAt &&
-                      Date.now() - i.lastHeartbeatAt.getTime() < 3 * 60 * 1000;
+                      nowMs - i.lastHeartbeatAt.getTime() < 3 * 60 * 1000;
+                    // Re-pair token activo (no usado, no caducado) para esta
+                    // instancia. La query de arriba ya trae todos los tokens
+                    // vivos de la firma; aquí filtramos por existingInstanceId.
+                    const activeRepair = firm.pairingTokens.find(
+                      (t) => t.existingInstanceId === i.id,
+                    );
+                    const repairMinsLeft = activeRepair
+                      ? Math.max(
+                          0,
+                          Math.round(
+                            (activeRepair.expiresAt.getTime() - nowMs) /
+                              60000,
+                          ),
+                        )
+                      : null;
                     return (
                       <TableRow key={i.id} className="hover:bg-paper-2/60">
                         <TableCell className="font-medium">
@@ -334,6 +410,42 @@ export default async function FirmPage() {
                           {i.lastHeartbeatAt
                             ? i.lastHeartbeatAt.toLocaleString("es-ES")
                             : "nunca"}
+                        </TableCell>
+                        <TableCell className="text-right">
+                          {activeRepair ? (
+                            <div
+                              className="inline-flex items-center gap-2 px-2 py-0.5 rounded text-xs"
+                              style={{
+                                background:
+                                  "linear-gradient(135deg, var(--brand-soft) 0%, transparent 100%)",
+                              }}
+                              title={`Pásale este código al trabajador. Caduca en ${repairMinsLeft} min.`}
+                            >
+                              <span className="font-mono font-semibold tracking-[0.1em]">
+                                {activeRepair.code}
+                              </span>
+                              <span className="text-muted-foreground">
+                                {repairMinsLeft}m
+                              </span>
+                            </div>
+                          ) : (
+                            <form action={quickRepairTokenAction}>
+                              <input
+                                type="hidden"
+                                name="instance_id"
+                                value={i.id}
+                              />
+                              <Button
+                                type="submit"
+                                variant="ghost"
+                                size="sm"
+                                className="h-7 px-2 text-xs text-muted-foreground hover:text-foreground"
+                                title="Generar código re-pair (si el trabajador reinstaló el PC)"
+                              >
+                                re-pair
+                              </Button>
+                            </form>
+                          )}
                         </TableCell>
                       </TableRow>
                     );
