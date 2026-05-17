@@ -133,6 +133,12 @@ export default async function OperatorFirmDetailPage({
             Usuarios
           </Link>
           <Link
+            href={`/firm/baselines?firmId=${firm.id}`}
+            className={buttonVariants({ variant: "outline", size: "sm" })}
+          >
+            Baselines
+          </Link>
+          <Link
             href={`/operator/firms/${firm.id}/edit`}
             className={buttonVariants({ variant: "outline", size: "sm" })}
           >

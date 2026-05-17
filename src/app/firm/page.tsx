@@ -69,6 +69,37 @@ export default async function FirmPage() {
     revalidatePath("/firm");
   }
 
+  async function revokePairingTokenAction(formData: FormData) {
+    "use server";
+    const sess = await requireFirmAdmin();
+    const tokenId = String(formData.get("token_id") ?? "");
+    if (!tokenId) throw new Error("token_id_required");
+    const t = await db.pairingToken.findUnique({
+      where: { id: tokenId },
+      select: {
+        id: true,
+        firmId: true,
+        code: true,
+        existingInstanceId: true,
+      },
+    });
+    if (!t || t.firmId !== sess.user.firmId) {
+      throw new Error("forbidden");
+    }
+    await db.pairingToken.delete({ where: { id: tokenId } });
+    await recordActivity({
+      kind: "pairing.revoke",
+      summary: t.existingInstanceId
+        ? `Revocó código re-pair (${t.code})`
+        : `Revocó código de alta de trabajador (${t.code})`,
+      firmId: t.firmId,
+      instanceId: t.existingInstanceId,
+      actor: sess,
+      metadata: { code: t.code, is_repair: !!t.existingInstanceId },
+    });
+    revalidatePath("/firm");
+  }
+
   // Acceso rápido al re-pair desde la tabla de instancias. Antes solo estaba
   // en /firm/instances/[id] (card "Re-emparejar este PC"), pero cuando un PC
   // está offline y hay que pasar el código por teléfono, entrar al detalle
@@ -250,7 +281,12 @@ export default async function FirmPage() {
         </div>
       </header>
 
-      {firm.pairingTokens.length > 0 && (
+      {/* Tokens de alta nueva (NO los de re-pair: esos viven en la columna
+          "Acciones" de la tabla de instancias). Filtrar por
+          existingInstanceId=null deja fuera los códigos asociados a una
+          instancia existente. */}
+      {firm.pairingTokens.filter((t) => t.existingInstanceId === null).length >
+        0 && (
         <Card className="card-paper border-0 shadow-none p-0">
           <CardHeader className="px-6 pt-6">
             <CardTitle className="font-display text-xl">
@@ -291,29 +327,41 @@ export default async function FirmPage() {
             <div className="space-y-2">
               <div className="eyebrow text-[10px]">2. Códigos activos</div>
               <div className="flex flex-wrap gap-2">
-                {firm.pairingTokens.map((t) => {
-                  const minsLeft = Math.max(
-                    0,
-                    Math.round((t.expiresAt.getTime() - nowMs) / 60000),
-                  );
-                  return (
-                    <div
-                      key={t.id}
-                      className="card-quiet px-4 py-3 flex items-center gap-3"
-                      style={{
-                        background:
-                          "linear-gradient(135deg, var(--brand-soft) 0%, transparent 100%)",
-                      }}
-                    >
-                      <span className="font-mono text-lg font-semibold tracking-[0.15em]">
-                        {t.code}
-                      </span>
-                      <span className="text-xs text-muted-foreground">
-                        caduca en {minsLeft} min
-                      </span>
-                    </div>
-                  );
-                })}
+                {firm.pairingTokens
+                  .filter((t) => t.existingInstanceId === null)
+                  .map((t) => {
+                    const minsLeft = Math.max(
+                      0,
+                      Math.round((t.expiresAt.getTime() - nowMs) / 60000),
+                    );
+                    return (
+                      <div
+                        key={t.id}
+                        className="card-quiet px-4 py-3 flex items-center gap-3"
+                        style={{
+                          background:
+                            "linear-gradient(135deg, var(--brand-soft) 0%, transparent 100%)",
+                        }}
+                      >
+                        <span className="font-mono text-lg font-semibold tracking-[0.15em]">
+                          {t.code}
+                        </span>
+                        <span className="text-xs text-muted-foreground">
+                          caduca en {minsLeft} min
+                        </span>
+                        <form action={revokePairingTokenAction}>
+                          <input type="hidden" name="token_id" value={t.id} />
+                          <button
+                            type="submit"
+                            className="text-xs text-muted-foreground hover:text-destructive underline"
+                            title="Revocar este código (útil si se filtró o ya no hace falta)"
+                          >
+                            revocar
+                          </button>
+                        </form>
+                      </div>
+                    );
+                  })}
               </div>
             </div>
           </CardContent>
@@ -427,6 +475,21 @@ export default async function FirmPage() {
                               <span className="text-muted-foreground">
                                 {repairMinsLeft}m
                               </span>
+                              <form action={revokePairingTokenAction}>
+                                <input
+                                  type="hidden"
+                                  name="token_id"
+                                  value={activeRepair.id}
+                                />
+                                <button
+                                  type="submit"
+                                  className="text-muted-foreground hover:text-destructive"
+                                  title="Revocar este código"
+                                  aria-label="Revocar código"
+                                >
+                                  ×
+                                </button>
+                              </form>
                             </div>
                           ) : (
                             <form action={quickRepairTokenAction}>

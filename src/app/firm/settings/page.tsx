@@ -3,9 +3,13 @@
  *
  * Editable:
  *   - Nombre comercial de la firma
+ *   - Canal de stack (stable | beta | dev) — permite pausar updates rotos
+ *   - Auto-update toggle — útil cuando una versión nueva rompe algo y el
+ *     firm admin quiere congelar la flota a la versión actual
  *
  * Solo lectura (operator gestiona):
- *   - Plan, seats contratadas, canal de stack, versiones pineadas
+ *   - Plan, seats contratadas, versiones pineadas concretas (openclaw,
+ *     bridge, overlay) — más técnico, lo gestiona el operator
  *
  * Link "ampliar plan" → mailto a soporte para contratar más seats / upgrade.
  */
@@ -64,6 +68,30 @@ export default async function FirmSettingsPage({
     revalidatePath("/firm/settings");
     revalidatePath("/firm");
     redirect("/firm/settings?saved=name");
+  }
+
+  async function updateStackPreferencesAction(formData: FormData) {
+    "use server";
+    const sess = await requireFirmAdmin();
+    const channel = String(formData.get("channel") ?? "");
+    const autoUpdate = formData.get("autoUpdate") === "true";
+    if (!["stable", "beta", "dev"].includes(channel)) {
+      throw new Error("channel_invalid");
+    }
+    await db.firm.update({
+      where: { id: sess.user.firmId },
+      data: { stackChannel: channel, stackAutoUpdate: autoUpdate },
+    });
+    await recordActivity({
+      kind: "firm.stack_preferences",
+      summary: `Cambió preferencias de stack: canal=${channel}, auto-update=${autoUpdate ? "sí" : "no"}`,
+      firmId: sess.user.firmId,
+      actor: sess,
+      metadata: { channel, autoUpdate },
+    });
+    revalidatePath("/firm/settings");
+    revalidatePath("/firm");
+    redirect("/firm/settings?saved=stack");
   }
 
   const requestUpgradeUrl = (() => {
@@ -184,33 +212,93 @@ export default async function FirmSettingsPage({
 
       <Card className="card-paper border-0 shadow-none p-0">
         <CardHeader className="px-6 pt-6">
-          <CardTitle className="font-display text-xl">Stack</CardTitle>
+          <CardTitle className="font-display text-xl">
+            Updates del stack
+          </CardTitle>
           <CardDescription>
-            Versiones pineadas por operator. Los cambios aquí solo los puede
-            hacer el operator de clawhub.
+            Controla qué versiones reciben los PCs de tu equipo. Si una
+            versión nueva rompe algo, pon el canal en <code>stable</code> o
+            desactiva auto-update para congelar la flota.
           </CardDescription>
         </CardHeader>
         <CardContent className="px-6 pb-6">
-          <dl className="grid grid-cols-2 gap-x-6 gap-y-3 text-sm">
-            <dt className="text-muted-foreground">Canal</dt>
-            <dd className="font-medium">{firm.stackChannel}</dd>
-            <dt className="text-muted-foreground">Auto-update</dt>
-            <dd className="font-medium">
-              {firm.stackAutoUpdate ? "Sí" : "No"}
-            </dd>
-            <dt className="text-muted-foreground">OpenClaw runtime</dt>
-            <dd className="font-mono text-xs">
-              {firm.openclawVersion ?? "latest"}
-            </dd>
-            <dt className="text-muted-foreground">Bridge</dt>
-            <dd className="font-mono text-xs">
-              {firm.bridgeVersion ?? "latest"}
-            </dd>
-            <dt className="text-muted-foreground">Overlay</dt>
-            <dd className="font-mono text-xs">
-              {firm.overlayId ? `${firm.overlayId}@${firm.overlayVersion ?? "latest"}` : "—"}
-            </dd>
-          </dl>
+          <form
+            action={updateStackPreferencesAction}
+            className="space-y-4 max-w-xl"
+          >
+            <div className="space-y-1">
+              <label htmlFor="channel" className="eyebrow text-[10px] block">
+                Canal
+              </label>
+              <select
+                id="channel"
+                name="channel"
+                defaultValue={firm.stackChannel}
+                className="card-quiet w-full px-3 h-10 text-sm bg-transparent border rounded-md focus:outline-none focus:ring-2 focus:ring-ring"
+              >
+                <option value="stable">
+                  stable — versiones probadas (recomendado)
+                </option>
+                <option value="beta">
+                  beta — nuevas features en testing
+                </option>
+                <option value="dev">
+                  dev — última build, puede fallar
+                </option>
+              </select>
+            </div>
+            <div className="space-y-1">
+              <label
+                htmlFor="autoUpdate"
+                className="eyebrow text-[10px] block"
+              >
+                Actualización automática
+              </label>
+              <select
+                id="autoUpdate"
+                name="autoUpdate"
+                defaultValue={firm.stackAutoUpdate ? "true" : "false"}
+                className="card-quiet w-full px-3 h-10 text-sm bg-transparent border rounded-md focus:outline-none focus:ring-2 focus:ring-ring"
+              >
+                <option value="true">
+                  Sí — los PCs aplican updates en el siguiente heartbeat
+                </option>
+                <option value="false">
+                  No — flota congelada hasta que vuelvas a activar
+                </option>
+              </select>
+            </div>
+            <Button type="submit" className="h-10 px-4">
+              Guardar preferencias
+            </Button>
+          </form>
+
+          <details className="mt-6">
+            <summary className="text-xs text-muted-foreground cursor-pointer hover:text-foreground">
+              Versiones pineadas (gestionadas por operator)
+            </summary>
+            <dl className="grid grid-cols-2 gap-x-6 gap-y-3 text-sm mt-3 pl-2">
+              <dt className="text-muted-foreground">OpenClaw runtime</dt>
+              <dd className="font-mono text-xs">
+                {firm.openclawVersion ?? "latest"}
+              </dd>
+              <dt className="text-muted-foreground">Bridge</dt>
+              <dd className="font-mono text-xs">
+                {firm.bridgeVersion ?? "latest"}
+              </dd>
+              <dt className="text-muted-foreground">Overlay</dt>
+              <dd className="font-mono text-xs">
+                {firm.overlayId
+                  ? `${firm.overlayId}@${firm.overlayVersion ?? "latest"}`
+                  : "—"}
+              </dd>
+            </dl>
+            <p className="text-xs text-muted-foreground mt-2 pl-2">
+              Si necesitas fijar una versión específica del runtime o el
+              bridge, pídelo a soporte — son cambios menos frecuentes y los
+              gestiona el operator de clawhub.
+            </p>
+          </details>
         </CardContent>
       </Card>
     </main>
