@@ -510,6 +510,85 @@ model FirmMcpInstall {
 }
 
 /**
+ * AgentCatalogEntry — catálogo curado de roles de agente importados de la
+ * librería clawcrew (repo hermano). Igual que McpServerCatalog es el "app
+ * store" de MCP servers, esto es el "app store" de AGENTES: el operator
+ * publica aquí los roles disponibles (executive, outbound-sdr, community,
+ * seo-writer, legal-light, …) con su identidad por defecto y su bloque de
+ * presentación (tagline, misión, retrato, paleta) para que los overlays los
+ * muestren "vestidos" sin hardcodear nada.
+ *
+ * Se siembra con `scripts/seed-agent-catalog.ts`, que lee los manifest.json de
+ * clawcrew en local y hace upsert idempotente. clawhub corre en Vercel y no
+ * tiene acceso al FS de clawcrew en runtime — por eso es seed local con acceso
+ * directo a Prisma, no ingesta por API.
+ *
+ * Una fila por (libraryId, agentKey): el upsert deja siempre la última versión.
+ * No se guarda histórico de versiones aquí (eso es StackBundle).
+ */
+model AgentCatalogEntry {
+  id                 String    @id @default(uuid())
+  libraryId          String    @default("clawcrew") // librería de origen
+  agentKey           String    // manifest.id — "executive", "seo-writer", …
+  version            String    // manifest.version (semver)
+  role               String    // manifest.role — resuelve siblings / plantillas
+  category           String    @default("general")
+  description        String
+  // Identidad por defecto (manifest.defaults): slug/displayName/shortName/icon/
+  // color/voice/workingVerb. El overlay la sobreescribe al instalar.
+  defaults           Json
+  // Bloque presentation del manifest (opcional). NULL si el agente no lo trae.
+  // { tagline, mission[], composer, approvalNote, portrait, palette{...} }
+  presentation       Json?
+  // URL servible del retrato (copia hospedada por clawhub en /public/catalog/).
+  // NULL si el agente no tiene retrato. El seed copia el PNG y rellena esto.
+  portraitUrl        String?
+  keywords           Json?     // string[] del manifest
+  compatibleOverlays Json?     // string[] del manifest
+  // Snapshot completo del manifest para el installer / forward-compat.
+  manifest           Json
+  sourceCommit       String?   // SHA de clawcrew en el momento del seed
+  // Visible en el catálogo. Soft-hide sin borrar (deprecación de roles).
+  deprecatedAt       DateTime?
+  createdAt          DateTime  @default(now())
+  updatedAt          DateTime  @updatedAt
+  indexedAt          DateTime  @default(now())
+
+  @@unique([libraryId, agentKey])
+  @@index([role])
+  @@index([category])
+  @@index([deprecatedAt])
+}
+
+/**
+ * OfficeTemplate — plantilla de "oficina por sector": un sector mapea a una
+ * lista ordenada de roles de agente del catálogo. El conserje de activación de
+ * ai-office recomienda una plantilla según el sector que elige el cliente, y
+ * el cliente confirma/ajusta el equipo. El SOCIO cura estas plantillas (CRUD);
+ * el cliente no las inventa.
+ *
+ * Migrado desde ai-office/web/src/lib/office-templates.ts (que usaba slugs de
+ * ai-office) — aquí se guardan como agentKeys de clawcrew para alinearse con
+ * el catálogo. sortOrder ordena el selector; recommended marca el default.
+ */
+model OfficeTemplate {
+  id          String   @id @default(uuid())
+  sector      String   @unique // "asesoria", "ecommerce", "agencia", …
+  name        String   // etiqueta humana — "Asesoría / Despacho"
+  emoji       String?  // chip del selector de sector ("📊")
+  description String?  // hint de reconocimiento ("Gestoría, abogados, …")
+  // Lista ordenada de agentKeys (refs a AgentCatalogEntry.agentKey).
+  agentKeys   Json     // ["executive", "legal-light", "seo-writer"]
+  sortOrder   Int      @default(0)
+  recommended Boolean  @default(false) // plantilla por defecto ("General")
+  active      Boolean  @default(true)  // ocultar sin borrar
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([active, sortOrder])
+}
+
+/**
  * Activity — log universal de quién hizo qué en clawhub.
  *
  * Se escribe desde múltiples puntos del backend: pair, command queue,
