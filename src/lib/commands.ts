@@ -85,6 +85,30 @@ export const COMMAND_KINDS = {
     description: "Descarga la lista de MCP servers instalados/activos de esta firma desde clawhub (FirmMcpInstall + McpServerCatalog) y reescribe la sección mcpServers de openclaw.json local. Después corre mcp:config y recarga. NO toca secrets — solo metadata.",
     args: z.object({}).optional(),
   },
+  install_agents: {
+    label: "Instalar agentes",
+    description:
+      "Instala/actualiza el equipo provisionado de la firma en el overlay del PC. El agent corre agent-cli install por cada agente con su identidad (slug/nombre/color/voz), escribiendo agents/workspaces + agent-registry.json + openclaw.json. Idempotente: re-instalar respeta MEMORY.md. PENDIENTE el handler en el dispatcher de clawgents-desktop (se valida en otro equipo).",
+    args: z.object({
+      // Overlay destino y prefijo del agentId ({prefix}-{slug}-v1). El agent
+      // resuelve la ruta del overlay localmente; aquí van como sugerencia.
+      overlay: z.string().min(1).max(80).optional(),
+      prefix: z.string().min(1).max(40),
+      agents: z
+        .array(
+          z.object({
+            agentKey: z.string().min(1).max(80), // rol del catálogo (executive, …)
+            slug: z.string().min(1).max(40), // identidad final (elena, …)
+            displayName: z.string().min(1).max(120),
+            color: z.string().regex(/^#[0-9a-fA-F]{6}$/).nullable().optional(),
+            icon: z.string().max(16).nullable().optional(),
+            voiceKind: z.enum(["male", "female", "neutral"]).nullable().optional(),
+            elevenlabsId: z.string().max(120).nullable().optional(),
+          }),
+        )
+        .min(1),
+    }),
+  },
 } as const;
 
 export type CommandKind = keyof typeof COMMAND_KINDS;

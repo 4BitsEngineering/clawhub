@@ -109,6 +109,7 @@ model Firm {
   activities    Activity[]
   invitations   Invitation[]
   mcpInstalls   FirmMcpInstall[]
+  agentInstalls FirmAgentInstall[]
 }
 
 enum FirmPlan {
@@ -558,6 +559,48 @@ model AgentCatalogEntry {
   @@index([role])
   @@index([category])
   @@index([deprecatedAt])
+  installs FirmAgentInstall[]
+}
+
+/**
+ * FirmAgentInstall — un agente del catálogo provisionado por el SOCIO para una
+ * firma concreta, con su identidad de instalación (overrides de los defaults
+ * del catálogo: el cliente lo verá como "Elena" aunque el rol sea "executive").
+ *
+ * Espejo de FirmMcpInstall, pero para agentes. El socio compone el equipo de la
+ * firma desde /operator/firms/[id]/team (partiendo de una plantilla por sector
+ * o agente a agente). De aquí sale el "plan de instalación" (comandos agent-cli
+ * + args del comando remoto install_agents).
+ *
+ * NOTA: la EJECUCIÓN en el PC del trabajador (dispatcher de clawgents-desktop
+ * que corre agent-cli y escribe agents/workspaces + agent-registry.json) es la
+ * pieza pendiente — se valida en otro equipo con la infra. clawhub solo PREPARA
+ * y encola; no instala nada por sí mismo.
+ */
+model FirmAgentInstall {
+  id           String            @id @default(uuid())
+  firmId       String
+  firm         Firm              @relation(fields: [firmId], references: [id], onDelete: Cascade)
+  catalogId    String
+  catalog      AgentCatalogEntry @relation(fields: [catalogId], references: [id], onDelete: Cascade)
+  // Denormalizado para construir el plan sin join (= catalog.agentKey).
+  agentKey     String
+  // Identidad de instalación (overrides de catalog.defaults). El cliente la ve.
+  slug         String            // "elena" — parte del agentId final {prefix}-{slug}-v1
+  displayName  String            // "Elena"
+  color        String?           // "#4F6D9E"
+  icon         String?           // emoji fallback
+  voiceKind    String?           // "male" | "female" | "neutral"
+  elevenlabsId String?           // voz premium opcional
+  sortOrder    Int               @default(0)
+  enabled      Boolean           @default(true)
+  installedBy  String?           // userId del operator que lo provisionó
+  createdAt    DateTime          @default(now())
+  updatedAt    DateTime          @updatedAt
+
+  @@unique([firmId, slug])
+  @@index([firmId, sortOrder])
+  @@index([catalogId])
 }
 
 /**
