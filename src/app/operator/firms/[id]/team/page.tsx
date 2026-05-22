@@ -39,6 +39,16 @@ function readDefaults(j: unknown): CatalogDefaults {
   return (j ?? {}) as CatalogDefaults;
 }
 
+// Lectura tipada de AgentCatalogEntry.presentation (bloque "vestido" de clawcrew).
+type CatalogPresentation = {
+  tagline?: string;
+  mission?: string[];
+  portrait?: string;
+};
+function readPresentation(j: unknown): CatalogPresentation {
+  return (j ?? {}) as CatalogPresentation;
+}
+
 const VOICE_KINDS = ["", "male", "female", "neutral"] as const;
 
 export default async function FirmTeamPage({
@@ -288,9 +298,8 @@ export default async function FirmTeamPage({
     }));
   const plan = provisioned.length > 0 ? buildInstallPlan(provisioned, prefix, firm.overlayId) : null;
 
-  // agentKeys ya en el equipo, para no duplicar en el dropdown de añadir.
+  // agentKeys ya en el equipo, para marcar las tarjetas del catálogo.
   const inTeam = new Set(team.map((t) => t.agentKey));
-  const addable = catalog.filter((c) => !inTeam.has(c.agentKey));
 
   return (
     <main className="container-page min-h-screen py-8 sm:py-12 space-y-8 max-w-5xl">
@@ -317,75 +326,132 @@ export default async function FirmTeamPage({
         </p>
       </header>
 
-      {/* Plantilla + añadir */}
-      <div className="grid gap-4 md:grid-cols-2">
-        <Card>
-          <CardHeader>
-            <CardTitle className="font-display text-lg">Cargar plantilla de sector</CardTitle>
-            <CardDescription>Reemplaza el equipo actual por el recomendado del sector.</CardDescription>
-          </CardHeader>
-          <CardContent>
-            <form action={applyTemplateAction} className="flex gap-2">
-              <select
-                name="sector"
-                className="flex h-9 flex-1 rounded-md border border-input bg-background px-3 text-sm"
-                defaultValue=""
-              >
-                <option value="" disabled>
-                  Elegir sector…
+      {/* Plantilla de sector (alta en un clic) */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="font-display text-lg">Cargar plantilla de sector</CardTitle>
+          <CardDescription>
+            Empieza con el equipo recomendado del sector en un clic. Reemplaza el
+            equipo actual; luego ajustas desde el catálogo.
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <form action={applyTemplateAction} className="flex gap-2 max-w-md">
+            <select
+              name="sector"
+              className="flex h-9 flex-1 rounded-md border border-input bg-background px-3 text-sm"
+              defaultValue=""
+            >
+              <option value="" disabled>
+                Elegir sector…
+              </option>
+              {templates.map((t) => (
+                <option key={t.sector} value={t.sector}>
+                  {t.emoji ? `${t.emoji} ` : ""}
+                  {t.name} ({((t.agentKeys as string[] | null) ?? []).length})
                 </option>
-                {templates.map((t) => (
-                  <option key={t.sector} value={t.sector}>
-                    {t.emoji ? `${t.emoji} ` : ""}
-                    {t.name} ({((t.agentKeys as string[] | null) ?? []).length})
-                  </option>
-                ))}
-              </select>
-              <Button type="submit" variant="outline">
-                Cargar
-              </Button>
-            </form>
-          </CardContent>
-        </Card>
+              ))}
+            </select>
+            <Button type="submit" variant="outline">
+              Cargar
+            </Button>
+          </form>
+        </CardContent>
+      </Card>
 
-        <Card>
-          <CardHeader>
-            <CardTitle className="font-display text-lg">Añadir del catálogo</CardTitle>
-            <CardDescription>Suma un rol individual al equipo actual.</CardDescription>
-          </CardHeader>
-          <CardContent>
-            {addable.length === 0 ? (
-              <p className="text-sm text-muted-foreground">
-                Todos los roles del catálogo ya están en el equipo.
-              </p>
-            ) : (
-              <form action={addAgentAction} className="flex gap-2">
-                <select
-                  name="catalogId"
-                  className="flex h-9 flex-1 rounded-md border border-input bg-background px-3 text-sm"
-                  defaultValue=""
-                >
-                  <option value="" disabled>
-                    Elegir rol…
-                  </option>
-                  {addable.map((c) => {
-                    const d = readDefaults(c.defaults);
-                    return (
-                      <option key={c.id} value={c.id}>
-                        {d.icon ? `${d.icon} ` : ""}
-                        {c.agentKey} — {d.displayName ?? c.role}
-                      </option>
-                    );
-                  })}
-                </select>
-                <Button type="submit" variant="outline">
-                  + Añadir
-                </Button>
-              </form>
-            )}
-          </CardContent>
-        </Card>
-      </div>
+      {/* Catálogo visual de agentes vestidos */}
+      <Card>
+        <CardHeader>
+          <CardTitle>Catálogo de agentes ({catalog.length})</CardTitle>
+          <CardDescription>
+            Roles del catálogo, listos para fichar. Cada uno llega «vestido»
+            (retrato, presentación y misión). Pulsa «Añadir» para sumarlo al
+            equipo del cliente.
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          {catalog.length === 0 ? (
+            <p className="text-sm text-muted-foreground">
+              El catálogo está vacío. Siémbralo con{" "}
+              <code className="text-xs">scripts/seed-agent-catalog.ts</code>.
+            </p>
+          ) : (
+            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+              {catalog.map((c) => {
+                const d = readDefaults(c.defaults);
+                const p = readPresentation(c.presentation);
+                const already = inTeam.has(c.agentKey);
+                return (
+                  <div key={c.id} className="flex flex-col gap-2 rounded-lg border p-3">
+                    <div className="flex items-center gap-2">
+                      {c.portraitUrl ? (
+                        // eslint-disable-next-line @next/next/no-img-element
+                        <img
+                          src={c.portraitUrl}
+                          alt={d.displayName ?? c.agentKey}
+                          width={40}
+                          height={40}
+                          className="h-10 w-10 shrink-0 rounded-md border bg-white object-cover"
+                        />
+                      ) : (
+                        <span
+                          aria-hidden
+                          className="flex h-10 w-10 shrink-0 items-center justify-center rounded-md border text-lg"
+                          style={{ background: d.color ?? "transparent" }}
+                        >
+                          {d.icon ?? "🤖"}
+                        </span>
+                      )}
+                      <div className="min-w-0">
+                        <div className="truncate text-sm font-medium">
+                          {d.displayName ?? c.agentKey}
+                        </div>
+                        <Badge variant="secondary" className="text-[10px]">
+                          {c.category}
+                        </Badge>
+                      </div>
+                    </div>
+
+                    {p.tagline && (
+                      <p className="text-xs text-muted-foreground">{p.tagline}</p>
+                    )}
+                    {p.mission && p.mission.length > 0 && (
+                      <ul className="space-y-0.5 text-[11px] text-muted-foreground">
+                        {p.mission.slice(0, 3).map((m, i) => (
+                          <li key={i} className="flex gap-1">
+                            <span aria-hidden>·</span>
+                            <span className="truncate">{m}</span>
+                          </li>
+                        ))}
+                      </ul>
+                    )}
+
+                    <div className="mt-auto pt-1">
+                      {already ? (
+                        <span className="text-[11px] text-muted-foreground">
+                          ✓ En el equipo
+                        </span>
+                      ) : (
+                        <form action={addAgentAction}>
+                          <input type="hidden" name="catalogId" value={c.id} />
+                          <Button
+                            type="submit"
+                            size="sm"
+                            variant="outline"
+                            className="h-7 w-full text-xs"
+                          >
+                            + Añadir al equipo
+                          </Button>
+                        </form>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </CardContent>
+      </Card>
 
       {/* Equipo */}
       <Card>
