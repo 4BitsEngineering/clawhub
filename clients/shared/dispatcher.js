@@ -338,7 +338,18 @@ async function executeCommand(env, cmd) {
       try {
         const r = await fetchJson(
           `${env.bridgeUrl}/api/admin/restart-bridge`,
-          { method: 'POST', headers: { 'content-type': 'application/json; charset=utf-8' } },
+          {
+            method: 'POST',
+            // The bridge gates destructive endpoints (HTTP-9): without an
+            // explicit confirmation it returns 428. Send the body so the
+            // restart actually fires (the helper sets Content-Length from the
+            // body string itself).
+            headers: {
+              'content-type': 'application/json; charset=utf-8',
+              'x-confirm-destructive': 'yes',
+            },
+            body: JSON.stringify({ confirm: true }),
+          },
           10_000,
         );
         if (!r.ok) return { ok: false, error: `bridge_${r.status}` };
@@ -418,7 +429,18 @@ async function executeCommand(env, cmd) {
       try {
         const r = await fetchJson(
           `${env.bridgeUrl}/api/admin/restart-gateway`,
-          { method: 'POST', headers: { 'content-type': 'application/json; charset=utf-8' } },
+          {
+            method: 'POST',
+            // The bridge gates destructive endpoints (HTTP-9): without an
+            // explicit confirmation it returns 428. Send the body so the
+            // restart actually fires (the helper sets Content-Length from the
+            // body string itself).
+            headers: {
+              'content-type': 'application/json; charset=utf-8',
+              'x-confirm-destructive': 'yes',
+            },
+            body: JSON.stringify({ confirm: true }),
+          },
           30_000,
         );
         if (!r.ok) return { ok: false, error: `bridge_${r.status}` };
