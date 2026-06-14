@@ -28,11 +28,17 @@ export async function POST(req: NextRequest) {
   const tokenHash = hashToken(token);
   const instance = await db.instance.findUnique({
     where: { instanceTokenHash: tokenHash },
+    include: { firm: true },
   });
 
   if (!instance) {
     return NextResponse.json({ error: "invalid_token" }, { status: 401 });
   }
+
+  const firm = instance.firm;
+  // Firma suspendida (impago, baja, etc.) → seguimos monitorizando la
+  // instancia (200 + heartbeat normal) pero NO le despachamos comandos.
+  const firmActive = firm.status === "active";
 
   let body: z.infer<typeof HeartbeatBody>;
   try {
@@ -102,6 +108,12 @@ export async function POST(req: NextRequest) {
       data: { status: InstanceCommandStatus.EXPIRED, completedAt: now },
     });
 
+    // Firma suspendida → no se despachan comandos remotos. Seguimos
+    // registrando el heartbeat (arriba) pero devolvemos commands: [].
+    if (!firmActive) {
+      return [];
+    }
+
     // Fetch PENDING vivos.
     const pending = await tx.instanceCommand.findMany({
       where: {
@@ -126,6 +138,8 @@ export async function POST(req: NextRequest) {
   return NextResponse.json({
     ok: true,
     next_heartbeat_in_s: 60,
+    firm_status: firm.status,
+    suspended_reason: firm.suspendedReason ?? undefined,
     commands: commandsToDispatch.map((c) => ({
       id: c.id,
       kind: c.kind,

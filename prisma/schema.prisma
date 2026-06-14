@@ -83,6 +83,9 @@ model Firm {
   name           String
   plan           FirmPlan @default(STARTER)
   seatsPurchased Int      @default(5)
+  status          String    @default("active")  // active | suspended
+  suspendedAt     DateTime?
+  suspendedReason String?
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt
 
