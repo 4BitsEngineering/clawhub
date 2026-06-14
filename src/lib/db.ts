@@ -15,9 +15,12 @@ function makeClient() {
 }
 
 function getClient(): PrismaClient {
-  const client = globalForPrisma.prisma ?? makeClient();
-  if (process.env.NODE_ENV !== "production") globalForPrisma.prisma = client;
-  return client;
+  // Memoizar SIEMPRE (también en producción): exactamente un PrismaClient por
+  // proceso durante toda su vida. Si solo se memoizara en dev, el Proxy de abajo
+  // crearía un cliente nuevo (y su pool de conexiones) en CADA acceso a `db` en
+  // producción → agotamiento del pool. En dev el global además sobrevive al HMR.
+  if (!globalForPrisma.prisma) globalForPrisma.prisma = makeClient();
+  return globalForPrisma.prisma;
 }
 
 // Cliente Prisma PEREZOSO: se instancia (y se exige DATABASE_URL) en el PRIMER
