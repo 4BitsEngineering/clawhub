@@ -494,6 +494,78 @@ async function reportCommandResult(env, cmd, outcome, logger) {
   }
 }
 
+// -------------------------------------------------------------------------
+// Kill-switch: reconciliación de suspensión por suscripción.
+//
+// El heartbeat de clawhub devuelve `firm_status` ('active' | 'suspended').
+// Traducimos ese estado a los endpoints admin del bridge (POST
+// /api/admin/suspend | /api/admin/resume) reutilizando el mismo patrón de
+// llamada que el resto de comandos admin (fetchJson + Bearer instanceToken).
+//
+// Estado local de módulo: persiste entre heartbeats dentro del mismo proceso
+// cliente. Solo cambia tras una llamada al bridge con éxito → si el bridge
+// falla de forma transitoria, lo reintentamos en el siguiente heartbeat.
+// -------------------------------------------------------------------------
+
+let suspendedLocally = false;
+
+/**
+ * Reconcilia el estado de suspensión de la firma con el bridge local.
+ * Llamar una vez por heartbeat, pasándole el body de la respuesta del
+ * heartbeat. Best-effort: nunca throwea (un fallo del bridge no debe romper
+ * el loop de heartbeat). Defensivo si `firm_status` está ausente (clawhub
+ * antiguo) → no hace nada.
+ */
+async function reconcileSuspension(env, heartbeatResp, logger) {
+  const firmStatus = heartbeatResp?.firm_status;
+  // clawhub antiguo no manda firm_status → no tocar el bridge.
+  if (firmStatus !== 'suspended' && firmStatus !== 'active') return;
+  if (!env.bridgeUrl) return;
+
+  const headers = {
+    'content-type': 'application/json; charset=utf-8',
+    authorization: `Bearer ${env.instanceToken}`,
+  };
+
+  if (firmStatus === 'suspended' && !suspendedLocally) {
+    const reason = heartbeatResp.suspended_reason || 'subscription';
+    try {
+      const r = await fetchJson(
+        `${env.bridgeUrl}/api/admin/suspend`,
+        { method: 'POST', headers, body: JSON.stringify({ reason }) },
+        10_000,
+      );
+      if (!r.ok) {
+        logger?.error?.(`[dispatcher] suspend → bridge_${r.status}: ${(r.raw || '').slice(0, 200)}`);
+        return; // sin éxito → no flip; reintenta el próximo heartbeat
+      }
+      suspendedLocally = true;
+      logger?.info?.(`[dispatcher] firm suspended → bridge service cut (reason: ${reason})`);
+    } catch (err) {
+      logger?.error?.(`[dispatcher] suspend failed: ${err.message}`);
+    }
+    return;
+  }
+
+  if (firmStatus === 'active' && suspendedLocally) {
+    try {
+      const r = await fetchJson(
+        `${env.bridgeUrl}/api/admin/resume`,
+        { method: 'POST', headers, body: JSON.stringify({}) },
+        10_000,
+      );
+      if (!r.ok) {
+        logger?.error?.(`[dispatcher] resume → bridge_${r.status}: ${(r.raw || '').slice(0, 200)}`);
+        return; // sin éxito → seguimos marcados como suspendidos; reintenta
+      }
+      suspendedLocally = false;
+      logger?.info?.('[dispatcher] firm active → bridge service resumed');
+    } catch (err) {
+      logger?.error?.(`[dispatcher] resume failed: ${err.message}`);
+    }
+  }
+}
+
 /**
  * Procesa una tanda de comandos en serie. No bloquea ni espera entre ellos
  * — el caller decide si lanzarlo en background. logger es opcional, debe
@@ -515,4 +587,4 @@ async function processCommands(env, commands, logger) {
   }
 }
 
-module.exports = { executeCommand, reportCommandResult, processCommands };
+module.exports = { executeCommand, reportCommandResult, processCommands, reconcileSuspension };
