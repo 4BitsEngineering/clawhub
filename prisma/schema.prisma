@@ -131,6 +131,9 @@ model Instance {
   workerLabel       String
   version           String
   os                String?
+  // MAC del adaptador con ruta por defecto del PC — el instalador la liga al
+  // parear (identidad de máquina). NULL = legacy / no reportada.
+  mac               String?
   lastHeartbeatAt   DateTime?
   createdAt         DateTime  @default(now())
 
@@ -151,6 +154,7 @@ model Instance {
 
   @@index([firmId])
   @@index([lastHeartbeatAt])
+  @@index([firmId, mac])
 }
 
 model Heartbeat {

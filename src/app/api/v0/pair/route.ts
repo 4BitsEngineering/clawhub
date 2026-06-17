@@ -9,6 +9,8 @@ const PairBody = z.object({
   worker_label: z.string().min(1).max(120),
   version: z.string().min(1).max(40),
   os: z.string().max(40).optional(),
+  // MAC del adaptador con ruta por defecto — identidad de máquina del PC.
+  mac: z.string().max(64).optional(),
 });
 
 export async function POST(req: NextRequest) {
@@ -98,6 +100,7 @@ export async function POST(req: NextRequest) {
           workerLabel: body.worker_label,
           version: body.version,
           os: body.os ?? null,
+          mac: body.mac ?? null,
         },
       }),
       db.pairingToken.update({
@@ -128,6 +131,7 @@ export async function POST(req: NextRequest) {
           workerLabel: body.worker_label,
           version: body.version,
           os: body.os ?? null,
+          mac: body.mac ?? null,
         },
       }),
       db.pairingToken.update({
