@@ -5,12 +5,18 @@ const globalForPrisma = globalThis as unknown as {
   prisma: PrismaClient | undefined;
 };
 
+// clawhub vive en un schema DEDICADO (no en `public`) para aislar sus tablas
+// dentro del proyecto Supabase compartido de la organización. Con el driver
+// adapter, el schema se fija aquí (genera queries cualificadas a ese schema);
+// las migraciones lo crean vía `?schema=clawhub` en DIRECT_URL.
+const CLAWHUB_SCHEMA = "clawhub";
+
 function makeClient() {
   const connectionString = process.env.DATABASE_URL;
   if (!connectionString) {
     throw new Error("DATABASE_URL is not set");
   }
-  const adapter = new PrismaPg({ connectionString });
+  const adapter = new PrismaPg({ connectionString }, { schema: CLAWHUB_SCHEMA });
   return new PrismaClient({ adapter });
 }
 
