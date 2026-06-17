@@ -14,3 +14,19 @@ export function generateInstanceToken(): { plain: string; hash: string } {
 export function hashToken(plain: string): string {
   return crypto.createHash("sha256").update(plain).digest("hex");
 }
+
+/**
+ * Genera un pairing code humano-friendly (formato XXXX-XXXX, 8 chars) sin
+ * caracteres confusos (0/O/1/I/L). Es el código que el firm_admin (o el
+ * configurator vía /api/v0/register) entrega al instalador para parear un PC.
+ * Usa crypto.randomInt (sin sesgo de módulo) en lugar de Math.random.
+ */
+export function generatePairingCode(): string {
+  const alphabet = "ABCDEFGHJKMNPQRSTUVWXYZ23456789"; // sin 0/O/1/I/L
+  let code = "";
+  for (let i = 0; i < 8; i++) {
+    code += alphabet[crypto.randomInt(alphabet.length)];
+    if (i === 3) code += "-";
+  }
+  return code;
+}

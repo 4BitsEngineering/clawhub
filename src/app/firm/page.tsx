@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { revalidatePath } from "next/cache";
 import { db } from "@/lib/db";
+import { generatePairingCode } from "@/lib/tokens";
 import { requireFirmAdmin } from "@/lib/session";
 
 export const dynamic = "force-dynamic";
@@ -27,17 +28,6 @@ import { SignOutButton } from "@/components/sign-out-button";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { ActivityTimeline } from "@/components/activity-timeline";
 import { recordActivity } from "@/lib/activity";
-
-// Genera un pairing code humano-friendly (8 chars, sin caracteres confusos).
-function generatePairingCode(): string {
-  const alphabet = "ABCDEFGHJKMNPQRSTUVWXYZ23456789"; // sin 0/O/1/I/L
-  let code = "";
-  for (let i = 0; i < 8; i++) {
-    code += alphabet[Math.floor(Math.random() * alphabet.length)];
-    if (i === 3) code += "-";
-  }
-  return code;
-}
 
 export default async function FirmPage() {
   const session = await requireFirmAdmin();

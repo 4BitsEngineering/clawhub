@@ -2,6 +2,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { revalidatePath } from "next/cache";
 import { db } from "@/lib/db";
+import { generatePairingCode } from "@/lib/tokens";
 import { requireOperator } from "@/lib/session";
 import { AutoRefresh } from "@/components/auto-refresh";
 import { Button, buttonVariants } from "@/components/ui/button";
@@ -25,16 +26,6 @@ import {
 import { Badge } from "@/components/ui/badge";
 
 export const dynamic = "force-dynamic";
-
-function generatePairingCode(): string {
-  const alphabet = "ABCDEFGHJKMNPQRSTUVWXYZ23456789";
-  let code = "";
-  for (let i = 0; i < 8; i++) {
-    code += alphabet[Math.floor(Math.random() * alphabet.length)];
-    if (i === 3) code += "-";
-  }
-  return code;
-}
 
 export default async function OperatorFirmDetailPage({
   params,

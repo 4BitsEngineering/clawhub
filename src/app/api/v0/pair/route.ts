@@ -156,10 +156,21 @@ export async function POST(req: NextRequest) {
     });
   }
 
+  // Baseline promovido de la firma (lo dejó el configurator en /api/v0/register
+  // o un firm_admin desde la UI). El instalador lo descarga con su nuevo
+  // instance_token vía GET /api/v0/baselines/[id] para provisionar el overlay.
+  const promoted = await db.firmBaseline.findFirst({
+    where: { firmId: pairingToken.firmId, isPromoted: true },
+    orderBy: { version: "desc" },
+    select: { id: true, version: true },
+  });
+
   return NextResponse.json({
     instance_id: instance.id,
     instance_token: plain,
     firm_id: pairingToken.firm.id,
     firm_name: pairingToken.firm.name,
+    promoted_baseline_id: promoted?.id ?? null,
+    promoted_baseline_version: promoted?.version ?? null,
   });
 }
