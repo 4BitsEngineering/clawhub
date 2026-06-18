@@ -100,18 +100,13 @@ export default async function LoginPage({
                     color: "var(--brand-foreground)",
                   }}
                 >
-                  Entrar como Operator (Admin) →
-                </Button>
-              </form>
-              <form action={devLoginAction}>
-                <input type="hidden" name="role" value="FIRM_ADMIN" />
-                <Button type="submit" variant="outline" size="sm" className="w-full">
-                  Entrar como Firm Admin
+                  Entrar al panel (Admin) →
                 </Button>
               </form>
               <p className="text-xs text-muted-foreground">
-                Acceso directo sin verificación (<code>DEV_AUTH_ENABLED</code>).
-                Desactívalo o añade login real antes de abrir la URL al público.
+                Acceso directo de validación sin verificación
+                (<code>DEV_AUTH_ENABLED</code>). Desactívalo o añade login real
+                antes de abrir la URL al público.
               </p>
             </div>
           ) : (
