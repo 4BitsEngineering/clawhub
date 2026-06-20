@@ -80,7 +80,7 @@ async function resolveBundle(
   return {
     version: b.version,
     sha256: b.sha256,
-    downloadUrl: b.downloadUrl,
+    downloadUrl: await resolveDownloadUrl(b.downloadUrl),
     sizeBytes: b.sizeBytes,
     releaseNotes: b.releaseNotes,
   };
