@@ -25,9 +25,20 @@ export async function resolveDownloadUrl(downloadUrl: string): Promise<string> {
   const bucket = downloadUrl.slice(0, slash);
   const objectPath = downloadUrl.slice(slash + 1);
 
+  // Anti path-traversal / SSRF al API de storage (firmamos con la service_role
+  // key): el bucket debe ser un id válido y cada segmento del objeto no puede
+  // ser vacío/`.`/`..` ni traer `\` o secuencias %-encoded de traversal. Si algo
+  // no cuadra, devolvemos el path SIN firmar (el cliente fallará la descarga,
+  // pero no construimos una URL hacia un objeto/bucket arbitrario).
+  if (!/^[a-z0-9][a-z0-9._-]{0,62}$/i.test(bucket)) return downloadUrl;
+  if (/%2e|%2f|\\/i.test(objectPath)) return downloadUrl;
+  const segments = objectPath.split("/");
+  if (segments.some((s) => s === "" || s === "." || s === "..")) return downloadUrl;
+  const safePath = segments.map(encodeURIComponent).join("/");
+
   try {
     const res = await fetch(
-      `${base}/storage/v1/object/sign/${bucket}/${encodeURI(objectPath)}`,
+      `${base}/storage/v1/object/sign/${bucket}/${safePath}`,
       {
         method: "POST",
         headers: {

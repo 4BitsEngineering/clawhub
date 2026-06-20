@@ -36,8 +36,18 @@ const Body = z.object({
   channel: z.string().min(1).max(40).optional(),
   sha256: z.string().length(64),
   // URL http(s) (p.ej. un Release) O un path de Supabase Storage `<bucket>/<obj>`
-  // que stack-manifest firma como signed URL (ver lib/storage.ts).
-  downloadUrl: z.string().min(1).max(500),
+  // que stack-manifest firma como signed URL (ver lib/storage.ts). El path
+  // rechaza segmentos `..` (anti-traversal); storage.ts revalida en runtime.
+  downloadUrl: z
+    .string()
+    .min(1)
+    .max(500)
+    .refine(
+      (v) =>
+        /^https?:\/\//i.test(v) ||
+        /^[a-z0-9][a-z0-9._-]{0,62}\/(?:(?!\.\.)[a-z0-9._-]+\/)*(?!\.\.)[a-z0-9._-]+$/i.test(v),
+      { message: "downloadUrl debe ser http(s) o un path de storage seguro <bucket>/<obj>" },
+    ),
   sizeBytes: z.number().int().positive(),
   sourceCommit: z.string().min(7).max(64).optional(),
   releaseNotes: z.string().max(8000).optional(),
