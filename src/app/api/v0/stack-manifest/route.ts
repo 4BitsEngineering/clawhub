@@ -30,6 +30,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { hashToken } from "@/lib/tokens";
+import { resolveDownloadUrl } from "@/lib/storage";
 import { StackBundleKind } from "@/generated/prisma/client";
 
 type ManifestEntry = {
@@ -60,7 +61,7 @@ async function resolveBundle(
     return {
       version: b.version,
       sha256: b.sha256,
-      downloadUrl: b.downloadUrl,
+      downloadUrl: await resolveDownloadUrl(b.downloadUrl),
       sizeBytes: b.sizeBytes,
       releaseNotes: b.releaseNotes,
     };
