@@ -60,6 +60,14 @@ export const COMMAND_KINDS = {
     description: "Re-evalúa el manifest de la firma, descarga las versiones nuevas de openclaw/bridge/overlay si las hay, y reinicia gateway+bridge para activarlas. Requiere desktop con supervisor; headless reportará 'supervisor required'.",
     args: z.object({}).optional(),
   },
+  set_ui_auth_token: {
+    label: "Cambiar contraseña de la consola",
+    description:
+      "Cambia EN REMOTO la contraseña de acceso a los menús de admin del overlay (UI_AUTH_TOKEN). El agente reescribe UI_AUTH_TOKEN (y UI_REQUIRE_LOGIN=true) en el .env.local de la instalación y reinicia la consola para que tome efecto. Requiere que la instancia ejecute el bucle de comandos (heartbeat).",
+    args: z.object({
+      token: z.string().min(8).max(256),
+    }),
+  },
   snapshot_to_baseline: {
     label: "Crear baseline desde esta instancia",
     description: "Lee el estado actual del overlay (openclaw.json + workspaces + enterprise + skills) y lo sube a clawhub como nuevo baseline de la firma. NO incluye secrets (.env).",
