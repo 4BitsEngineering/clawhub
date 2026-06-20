@@ -14,6 +14,7 @@
  */
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
+import { resolveDownloadUrl } from "@/lib/storage";
 
 export const dynamic = "force-dynamic";
 
@@ -41,6 +42,7 @@ export async function GET(req: NextRequest) {
   // 302 redirect → el browser descarga directamente desde el storage final.
   // No proxy-streaming desde Vercel para no pagar bandwidth ni hit límites
   // de timeout en functions (un .exe de 80MB excede el límite de Vercel
-  // serverless edge).
-  return NextResponse.redirect(bundle.downloadUrl, 302);
+  // serverless edge). Si el downloadUrl es un path de Supabase Storage, lo
+  // firmamos a una signed URL caducable; si ya es http(s), pasa-through.
+  return NextResponse.redirect(await resolveDownloadUrl(bundle.downloadUrl), 302);
 }
