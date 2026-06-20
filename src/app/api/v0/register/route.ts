@@ -62,6 +62,10 @@ const Body = z.object({
       name: z.string().min(1).max(200).optional(),
       plan: z.enum(["STARTER", "PRO", "BUSINESS", "ENTERPRISE"]).optional(),
       seatsPurchased: z.number().int().positive().max(10000).optional(),
+      // Producto/overlay del que la firma recibe el stack. El bootstrapper lo
+      // necesita: stack-manifest devuelve el bundle OVERLAY filtrado por
+      // Firm.overlayId. Default "ai-office" (este control plane sirve ai-office).
+      overlayId: z.string().min(1).max(80).optional(),
     })
     .refine((f) => f.id || f.name, {
       message: "firm.id o firm.name es obligatorio",
@@ -129,6 +133,9 @@ export async function POST(req: NextRequest) {
         name: body.firm.name!,
         plan: body.firm.plan ?? undefined,
         seatsPurchased: body.firm.seatsPurchased ?? undefined,
+        // Sin overlayId, stack-manifest devolvería overlay:null y el bootstrapper
+        // no encontraría el bundle. Default al producto de este control plane.
+        overlayId: body.firm.overlayId ?? "ai-office",
         status: "active",
       },
       select: { id: true, name: true },
