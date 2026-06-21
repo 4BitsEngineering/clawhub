@@ -51,6 +51,7 @@ export default async function OperatorFirmDetailPage({
 
   async function generatePairingTokenAction() {
     "use server";
+    await requireOperator(); // server action ≠ render: reautenticar aquí
     await db.pairingToken.create({
       data: {
         firmId: id,
@@ -63,6 +64,7 @@ export default async function OperatorFirmDetailPage({
 
   async function addFirmAdminAction(formData: FormData) {
     "use server";
+    await requireOperator(); // server action ≠ render: reautenticar aquí
     const email = ((formData.get("email") as string) ?? "").trim().toLowerCase();
     const name = ((formData.get("name") as string) ?? "").trim() || null;
 
@@ -74,6 +76,33 @@ export default async function OperatorFirmDetailPage({
       create: { email, name, role: "FIRM_ADMIN", firmId: id },
     });
 
+    revalidatePath(`/operator/firms/${id}`);
+  }
+
+  // Kill-switch por instancia: por defecto las instancias funcionan; solo se
+  // bloquean con esta orden explícita. Pone/limpia disabledAt → el heartbeat
+  // responde instance_status y el bridge del cliente bloquea/desbloquea.
+  async function setInstanceDisabledAction(formData: FormData) {
+    "use server";
+    // Las server actions son endpoints POST independientes: NO heredan el
+    // requireOperator() del render. Reautenticamos aquí (redirige si no es
+    // OPERATOR) y validamos que la instancia pertenece a ESTA firma (evita IDOR
+    // por instanceId arbitrario).
+    await requireOperator();
+    const instanceId = ((formData.get("instanceId") as string) ?? "").trim();
+    if (!instanceId) return;
+    const inst = await db.instance.findUnique({
+      where: { id: instanceId },
+      select: { firmId: true },
+    });
+    if (!inst || inst.firmId !== id) return;
+    const disable = formData.get("disable") === "1";
+    await db.instance.update({
+      where: { id: instanceId },
+      data: disable
+        ? { disabledAt: new Date(), disabledReason: "Desactivada por el proveedor" }
+        : { disabledAt: null, disabledReason: null },
+    });
     revalidatePath(`/operator/firms/${id}`);
   }
 
@@ -241,6 +270,7 @@ export default async function OperatorFirmDetailPage({
                   <TableHead>Versión</TableHead>
                   <TableHead>OS</TableHead>
                   <TableHead>Último heartbeat</TableHead>
+                  <TableHead>Acceso</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -273,6 +303,24 @@ export default async function OperatorFirmDetailPage({
                         {i.lastHeartbeatAt
                           ? i.lastHeartbeatAt.toLocaleString("es-ES")
                           : "nunca"}
+                      </TableCell>
+                      <TableCell>
+                        <form action={setInstanceDisabledAction}>
+                          <input type="hidden" name="instanceId" value={i.id} />
+                          <input
+                            type="hidden"
+                            name="disable"
+                            value={i.disabledAt ? "0" : "1"}
+                          />
+                          <div className="flex items-center gap-2">
+                            {i.disabledAt && (
+                              <Badge variant="destructive">bloqueada</Badge>
+                            )}
+                            <Button type="submit" variant="outline" size="sm">
+                              {i.disabledAt ? "Reactivar" : "Bloquear acceso"}
+                            </Button>
+                          </div>
+                        </form>
                       </TableCell>
                     </TableRow>
                   );

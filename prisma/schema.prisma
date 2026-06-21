@@ -147,6 +147,12 @@ model Instance {
   runningOverlayId       String?
   runningOverlayVersion  String?
 
+  // Kill-switch POR INSTANCIA (distinto de Firm.status, que suspende la firma
+  // entera). Si disabledAt != null, el heartbeat responde instance_status:
+  // "disabled" y el bridge bloquea el acceso ("contacta con tu proveedor").
+  disabledAt     DateTime?
+  disabledReason String?
+
   heartbeats Heartbeat[]
   commands   InstanceCommand[]
   usageRecords UsageRecord[]

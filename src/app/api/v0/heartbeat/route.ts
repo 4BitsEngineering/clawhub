@@ -140,6 +140,9 @@ export async function POST(req: NextRequest) {
     next_heartbeat_in_s: 60,
     firm_status: firm.status,
     suspended_reason: firm.suspendedReason ?? undefined,
+    // Kill-switch por instancia: el bridge bloquea el acceso si "disabled".
+    instance_status: instance.disabledAt ? "disabled" : "active",
+    disabled_reason: instance.disabledReason ?? undefined,
     commands: commandsToDispatch.map((c) => ({
       id: c.id,
       kind: c.kind,
