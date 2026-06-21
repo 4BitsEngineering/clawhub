@@ -361,6 +361,47 @@ export default async function InstanceDetailPage({
     revalidatePath(`/firm/instances/${id}`);
   }
 
+  async function notifyUserAction(formData: FormData) {
+    "use server";
+    const sess = await getSession();
+    if (!sess) redirect("/login");
+    if (
+      sess.user.role === "FIRM_ADMIN" &&
+      instance!.firmId !== sess.user.firmId
+    ) {
+      throw new Error("forbidden");
+    }
+    const title = String(formData.get("title") ?? "").trim();
+    const body = String(formData.get("body") ?? "").trim();
+    const level = String(formData.get("level") ?? "info");
+    const url = String(formData.get("url") ?? "").trim() || undefined;
+    if (!title || !body) throw new Error("title_and_body_required");
+    const args = validateArgs("notify_user", {
+      title,
+      body,
+      level: ["info", "warn", "success"].includes(level) ? level : "info",
+      ...(url ? { url } : {}),
+    });
+    await db.instanceCommand.create({
+      data: {
+        instanceId: instance!.id,
+        kind: "notify_user",
+        args: args as Prisma.InputJsonValue,
+        createdBy: sess.user.id,
+        expiresAt: new Date(Date.now() + COMMAND_DEFAULT_TTL_MS),
+      },
+    });
+    await recordActivity({
+      kind: "command.create",
+      summary: `Envió aviso "${title}" a "${inst.workerLabel}"`,
+      firmId: inst.firmId,
+      instanceId: inst.id,
+      actor: sess,
+      metadata: { command_kind: "notify_user", title },
+    });
+    revalidatePath(`/firm/instances/${id}`);
+  }
+
   async function pushConfigPatchAction(formData: FormData) {
     "use server";
     const sess = await getSession();
@@ -1300,6 +1341,57 @@ export default async function InstanceDetailPage({
               <Button type="submit" size="sm">Aplicar</Button>
             </form>
           </div>
+        </CardContent>
+      </Card>
+
+      {/* Aviso al usuario — notify_user: banner dentro de la instancia */}
+      <Card className="card-paper border-0 shadow-none p-0">
+        <CardHeader className="px-6 pt-6">
+          <CardTitle className="font-display text-xl">Aviso al usuario</CardTitle>
+          <CardDescription>
+            Muestra un mensaje DENTRO de la instancia (banner descartable en la
+            web del cliente). Útil para comunicar mantenimientos, novedades o
+            avisos. Se entrega en el próximo heartbeat.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="px-6 pb-6">
+          <form action={notifyUserAction} className="card-quiet p-4 space-y-2 max-w-xl">
+            <input
+              type="text"
+              name="title"
+              placeholder="Título (p. ej. Mantenimiento programado)"
+              required
+              maxLength={200}
+              className="card-paper w-full px-3 py-2 text-sm bg-transparent border rounded-md focus:outline-none focus:ring-2 focus:ring-ring"
+            />
+            <textarea
+              name="body"
+              placeholder="Mensaje para el usuario"
+              required
+              maxLength={2000}
+              rows={3}
+              className="card-paper w-full px-3 py-2 text-sm bg-transparent border rounded-md focus:outline-none focus:ring-2 focus:ring-ring"
+            />
+            <div className="flex gap-2">
+              <select
+                name="level"
+                defaultValue="info"
+                className="card-paper px-3 py-2 text-sm bg-transparent border rounded-md focus:outline-none focus:ring-2 focus:ring-ring"
+              >
+                <option value="info">info</option>
+                <option value="warn">aviso</option>
+                <option value="success">éxito</option>
+              </select>
+              <input
+                type="url"
+                name="url"
+                placeholder="URL opcional (Más info)"
+                maxLength={500}
+                className="card-paper flex-1 px-3 py-2 text-sm bg-transparent border rounded-md focus:outline-none focus:ring-2 focus:ring-ring"
+              />
+            </div>
+            <Button type="submit" size="sm">Enviar aviso</Button>
+          </form>
         </CardContent>
       </Card>
 

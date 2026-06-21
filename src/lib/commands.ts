@@ -93,6 +93,19 @@ export const COMMAND_KINDS = {
     description: "Descarga la lista de MCP servers instalados/activos de esta firma desde clawhub (FirmMcpInstall + McpServerCatalog) y reescribe la sección mcpServers de openclaw.json local. Después corre mcp:config y recarga. NO toca secrets — solo metadata.",
     args: z.object({}).optional(),
   },
+  notify_user: {
+    label: "Enviar aviso al usuario",
+    description:
+      "Muestra un mensaje al usuario DENTRO de la instancia (título + cuerpo, con nivel info/warn/success y URL opcional). El agente lo guarda en un fichero de avisos local que la web sondea y muestra como banner/toaster, descartable. Útil para comunicar mantenimientos, novedades o avisos puntuales a una o varias instancias monitoreadas.",
+    args: z.object({
+      title: z.string().min(1).max(200),
+      body: z.string().min(1).max(2000),
+      level: z.enum(["info", "warn", "success"]).optional(),
+      url: z.string().url().max(500).optional(),
+      // id estable opcional para idempotencia (re-encolar no duplica el aviso).
+      id: z.string().min(1).max(80).optional(),
+    }),
+  },
   install_agents: {
     label: "Instalar agentes",
     description:
