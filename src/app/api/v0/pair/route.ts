@@ -10,15 +10,20 @@ import { recordActivity, systemActor } from "@/lib/activity";
 const WINDOW_MINUTES = 15;
 const MAX_FAILS = 10;
 
-/** Devuelve el SHA-256 hex de la IP del cliente (sin almacenar la IP en claro). */
-function getClientIpHash(req: NextRequest): string {
-  // x-forwarded-for puede ser "ip1, ip2, ip3" — el primero es el cliente real.
-  const xff = req.headers.get("x-forwarded-for");
+/**
+ * SHA-256 hex de la IP REAL del cliente, o null si no se puede determinar de
+ * forma fiable. En Vercel, `x-real-ip` y `x-vercel-forwarded-for` los fija la
+ * plataforma con el peer IP real y NO son manipulables por el cliente. NO se usa
+ * el left-most de `x-forwarded-for`: ese valor lo controla el cliente y permitiría
+ * evadir el rate-limit enviando una IP distinta en cada request.
+ */
+function getClientIpHash(req: NextRequest): string | null {
   const ip =
-    (xff ? xff.split(",")[0].trim() : null) ??
     req.headers.get("x-real-ip") ??
-    "unknown";
-  return createHash("sha256").update(ip).digest("hex");
+    req.headers.get("x-vercel-forwarded-for") ??
+    null;
+  if (!ip) return null;
+  return createHash("sha256").update(ip.trim()).digest("hex");
 }
 
 const PairBody = z.object({
@@ -44,19 +49,20 @@ export async function POST(req: NextRequest) {
   // ── Rate-limit gate ──────────────────────────────────────────────────────
   // Contar intentos FALLIDOS de esta IP en la ventana. Si se supera el límite,
   // rechazar antes de tocar la base de datos de tokens (evita timing oracle).
+  // Solo aplicamos rate-limit cuando podemos determinar la IP de forma fiable
+  // (en Vercel siempre). Si no, no agrupamos en un bucket compartido.
   const ipHash = getClientIpHash(req);
-  const windowStart = new Date(Date.now() - WINDOW_MINUTES * 60_000);
-  const failCount = await db.pairAttempt.count({
-    where: { ipHash, createdAt: { gte: windowStart } },
-  });
-  if (failCount >= MAX_FAILS) {
-    return NextResponse.json(
-      { error: "too_many_attempts", retry_after_minutes: WINDOW_MINUTES },
-      {
-        status: 429,
-        headers: { "Retry-After": String(WINDOW_MINUTES * 60) },
-      },
-    );
+  if (ipHash) {
+    const windowStart = new Date(Date.now() - WINDOW_MINUTES * 60_000);
+    const failCount = await db.pairAttempt.count({
+      where: { ipHash, createdAt: { gte: windowStart } },
+    });
+    if (failCount >= MAX_FAILS) {
+      return NextResponse.json(
+        { error: "too_many_attempts", retry_after_minutes: WINDOW_MINUTES },
+        { status: 429, headers: { "Retry-After": String(WINDOW_MINUTES * 60) } },
+      );
+    }
   }
   // ─────────────────────────────────────────────────────────────────────────
 
@@ -66,15 +72,15 @@ export async function POST(req: NextRequest) {
   });
 
   if (!pairingToken) {
-    await db.pairAttempt.create({ data: { ipHash } });
+    if (ipHash) await db.pairAttempt.create({ data: { ipHash } });
     return NextResponse.json({ error: "code_not_found" }, { status: 404 });
   }
   if (pairingToken.usedAt) {
-    await db.pairAttempt.create({ data: { ipHash } });
+    if (ipHash) await db.pairAttempt.create({ data: { ipHash } });
     return NextResponse.json({ error: "code_already_used" }, { status: 410 });
   }
   if (pairingToken.expiresAt < new Date()) {
-    await db.pairAttempt.create({ data: { ipHash } });
+    if (ipHash) await db.pairAttempt.create({ data: { ipHash } });
     return NextResponse.json({ error: "code_expired" }, { status: 410 });
   }
 
