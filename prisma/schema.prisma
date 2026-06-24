@@ -728,3 +728,24 @@ model Activity {
   @@index([createdAt])
   @@index([kind, createdAt])
 }
+
+/**
+ * PairAttempt — registro de cada intento FALLIDO de pareo por IP (hash).
+ *
+ * Se escribe cuando /api/v0/pair recibe un código que no existe, ya fue usado
+ * o ha expirado. Permite detectar y bloquear ataques de fuerza bruta sobre el
+ * `pairing_code` sin penalizar a clientes legítimos (que aciertan a la primera).
+ *
+ * La IP no se guarda en claro — solo su SHA-256 hex. La ventana de conteo
+ * es corta (15 min, configurable) y el umbral holgado (10 fallos).
+ *
+ * Limpieza: los registros antiguos pueden borrarse libremente (cron o lazy)
+ * sin impacto en el negocio. El sweep periódico puede usar `createdAt < now()-1h`.
+ */
+model PairAttempt {
+  id        String   @id @default(cuid())
+  ipHash    String   // sha256 hex de la IP del cliente (no se guarda IP en claro)
+  createdAt DateTime @default(now())
+
+  @@index([ipHash, createdAt])
+}

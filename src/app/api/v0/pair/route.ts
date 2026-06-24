@@ -1,8 +1,25 @@
 import { NextRequest, NextResponse } from "next/server";
+import { createHash } from "crypto";
 import { z } from "zod";
 import { db } from "@/lib/db";
 import { generateInstanceToken } from "@/lib/tokens";
 import { recordActivity, systemActor } from "@/lib/activity";
+
+// Rate-limiting: ventana de 15 minutos, máximo 10 intentos FALLIDOS por IP.
+// Los clientes legítimos aciertan a la primera — no se ven afectados.
+const WINDOW_MINUTES = 15;
+const MAX_FAILS = 10;
+
+/** Devuelve el SHA-256 hex de la IP del cliente (sin almacenar la IP en claro). */
+function getClientIpHash(req: NextRequest): string {
+  // x-forwarded-for puede ser "ip1, ip2, ip3" — el primero es el cliente real.
+  const xff = req.headers.get("x-forwarded-for");
+  const ip =
+    (xff ? xff.split(",")[0].trim() : null) ??
+    req.headers.get("x-real-ip") ??
+    "unknown";
+  return createHash("sha256").update(ip).digest("hex");
+}
 
 const PairBody = z.object({
   pairing_code: z.string().min(4).max(32),
@@ -24,18 +41,40 @@ export async function POST(req: NextRequest) {
     );
   }
 
+  // ── Rate-limit gate ──────────────────────────────────────────────────────
+  // Contar intentos FALLIDOS de esta IP en la ventana. Si se supera el límite,
+  // rechazar antes de tocar la base de datos de tokens (evita timing oracle).
+  const ipHash = getClientIpHash(req);
+  const windowStart = new Date(Date.now() - WINDOW_MINUTES * 60_000);
+  const failCount = await db.pairAttempt.count({
+    where: { ipHash, createdAt: { gte: windowStart } },
+  });
+  if (failCount >= MAX_FAILS) {
+    return NextResponse.json(
+      { error: "too_many_attempts", retry_after_minutes: WINDOW_MINUTES },
+      {
+        status: 429,
+        headers: { "Retry-After": String(WINDOW_MINUTES * 60) },
+      },
+    );
+  }
+  // ─────────────────────────────────────────────────────────────────────────
+
   const pairingToken = await db.pairingToken.findUnique({
     where: { code: body.pairing_code },
     include: { firm: true },
   });
 
   if (!pairingToken) {
+    await db.pairAttempt.create({ data: { ipHash } });
     return NextResponse.json({ error: "code_not_found" }, { status: 404 });
   }
   if (pairingToken.usedAt) {
+    await db.pairAttempt.create({ data: { ipHash } });
     return NextResponse.json({ error: "code_already_used" }, { status: 410 });
   }
   if (pairingToken.expiresAt < new Date()) {
+    await db.pairAttempt.create({ data: { ipHash } });
     return NextResponse.json({ error: "code_expired" }, { status: 410 });
   }
 
