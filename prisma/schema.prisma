@@ -424,6 +424,11 @@ model StackBundle {
   overlayId    String?          // solo para kind=OVERLAY
   version      String           // e.g. "1.41.5", "2026.5.16"
   channel      String           @default("stable")
+  // SO destino del bundle (solo relevante para kind=INSTALLER): "windows" |
+  // "darwin" | "linux". NULLABLE para compat con registros legacy (pre-Task 13);
+  // el endpoint /api/v0/installer filtra por él y register lo defaultea a
+  // "windows" para INSTALLER sin platform explícito.
+  platform     String?
   sha256       String
   downloadUrl  String
   sizeBytes    Int
@@ -436,8 +441,9 @@ model StackBundle {
   // Soft delete — no borrar bundles porque hay PCs corriéndolos.
   deprecatedAt DateTime?
 
-  @@unique([kind, overlayId, version, channel])
+  @@unique([kind, overlayId, version, channel, platform])
   @@index([kind, channel, releasedAt])
+  @@index([kind, channel, platform, releasedAt])
   @@index([overlayId, channel, releasedAt])
 }
 

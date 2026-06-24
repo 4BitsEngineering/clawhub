@@ -52,6 +52,9 @@ const Body = z.object({
   sourceCommit: z.string().min(7).max(64).optional(),
   releaseNotes: z.string().max(8000).optional(),
   publishedBy: z.string().min(1).max(120).optional(),
+  // SO destino (solo relevante para kind=INSTALLER). Si no viene y es INSTALLER,
+  // se defaultea a "windows" (compat con el workflow legacy de Windows).
+  platform: z.enum(["windows", "darwin", "linux"]).optional(),
 });
 
 function checkAuth(req: NextRequest): boolean {
@@ -94,6 +97,9 @@ export async function POST(req: NextRequest) {
   }
 
   const channel = body.channel ?? "stable";
+  // Default "windows" para INSTALLER legacy sin platform (el workflow de Windows
+  // no lo enviaba). Para no-INSTALLER queda null (no aplica el concepto de SO).
+  const platform = body.platform ?? (body.kind === "INSTALLER" ? "windows" : null);
 
   try {
     const created = await db.stackBundle.create({
@@ -102,6 +108,7 @@ export async function POST(req: NextRequest) {
         overlayId: body.kind === "OVERLAY" ? body.overlayId! : null,
         version: body.version,
         channel,
+        platform,
         sha256: body.sha256,
         downloadUrl: body.downloadUrl,
         sizeBytes: body.sizeBytes,
@@ -145,6 +152,7 @@ export async function POST(req: NextRequest) {
           overlayId: body.kind === "OVERLAY" ? body.overlayId! : null,
           version: body.version,
           channel,
+          platform,
         },
       });
       return NextResponse.json(

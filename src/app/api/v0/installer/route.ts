@@ -18,9 +18,23 @@ import { resolveDownloadUrl } from "@/lib/storage";
 
 export const dynamic = "force-dynamic";
 
+// SO destino del instalador. Prioridad: query `?platform=` explícito (lo pasa el
+// configurator) → detección por user-agent → "windows" por defecto.
+function resolvePlatform(req: NextRequest, explicit: string | null): string {
+  if (explicit === "windows" || explicit === "darwin" || explicit === "linux") {
+    return explicit;
+  }
+  const ua = req.headers.get("user-agent") || "";
+  if (/Macintosh|Mac OS/i.test(ua)) return "darwin";
+  if (/Windows/i.test(ua)) return "windows";
+  if (/Linux/i.test(ua)) return "linux";
+  return "windows";
+}
+
 export async function GET(req: NextRequest) {
   const { searchParams } = new URL(req.url);
   const channel = searchParams.get("channel") || "stable";
+  const platform = resolvePlatform(req, searchParams.get("platform"));
   // pairing es opcional — futuro hook de telemetría/tracking.
   // const pairing = searchParams.get("pairing");
 
@@ -28,13 +42,14 @@ export async function GET(req: NextRequest) {
     where: {
       kind: "INSTALLER",
       channel,
+      platform,
       deprecatedAt: null,
     },
     orderBy: { releasedAt: "desc" },
   });
   if (!bundle) {
     return NextResponse.json(
-      { error: "no_installer_published", channel },
+      { error: "no_installer_published", channel, platform },
       { status: 404 },
     );
   }
