@@ -16,7 +16,7 @@ const playfair = Playfair_Display({
 });
 
 export const metadata: Metadata = {
-  title: "clawhub · control plane",
+  title: "AI-Office Center · control plane",
   description: "Control plane multi-tenant para instancias de OpenClaw Copilot.",
 };
 

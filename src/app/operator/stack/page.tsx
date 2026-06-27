@@ -108,7 +108,7 @@ export default async function OperatorStackPage() {
       <header className="space-y-2">
         <div className="text-sm">
           <Link href="/operator" className="text-muted-foreground hover:text-foreground">
-            ← clawhub
+            ← AI-Office Center
           </Link>
         </div>
         <div className="eyebrow-chip">stack management</div>
@@ -127,7 +127,7 @@ export default async function OperatorStackPage() {
         <CardHeader className="px-6 pt-6">
           <CardTitle className="font-display text-xl">Bundles publicados</CardTitle>
           <CardDescription>
-            Cada release de openclaw / bridge / overlay registrado en clawhub.
+            Cada release de openclaw / bridge / overlay registrado en AI-Office Center.
             Sube nuevos con <code>scripts/release-bundle.ts</code>.
           </CardDescription>
         </CardHeader>

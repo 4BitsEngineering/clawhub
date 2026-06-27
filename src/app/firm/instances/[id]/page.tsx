@@ -802,7 +802,7 @@ export default async function InstanceDetailPage({
             localMcp.servers.length === 0 ? (
             <p className="text-xs text-muted-foreground py-4">
               No hay MCP servers configurados en este PC. Cuando publiques
-              uno desde clawhub, aparecerá aquí.
+              uno desde AI-Office Center, aparecerá aquí.
             </p>
           ) : (
             <div className="space-y-2">
@@ -1180,7 +1180,7 @@ export default async function InstanceDetailPage({
             Versiones del stack
           </CardTitle>
           <CardDescription>
-            Lo que clawhub pidió (manifest) vs lo que esta instancia está
+            Lo que AI-Office Center pidió (manifest) vs lo que esta instancia está
             corriendo. Si hay diff, encola{" "}
             <code>apply_stack_update</code> para que el cliente descargue las
             nuevas versiones y reinicie gateway+bridge.

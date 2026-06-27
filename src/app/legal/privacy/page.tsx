@@ -8,12 +8,12 @@
 import Link from "next/link";
 
 export const metadata = {
-  title: "Política de Privacidad — clawhub",
+  title: "Política de Privacidad — AI-Office Center",
 };
 
 export default function PrivacyPage() {
   const updatedAt = "2026-05-17";
-  const supportEmail = process.env.NEXT_PUBLIC_SUPPORT_EMAIL || "soporte@clawhub.es";
+  const supportEmail = process.env.NEXT_PUBLIC_SUPPORT_EMAIL || "soporte@ai-officecenter.com";
   const operatorOrg = process.env.NEXT_PUBLIC_OPERATOR_ORG || "[NOMBRE DE LA EMPRESA OPERADORA]";
 
   return (
@@ -33,7 +33,7 @@ export default function PrivacyPage() {
         <p>
           Esta política explica cómo <strong>{operatorOrg}</strong> (en
           adelante &ldquo;el Operador&rdquo;) trata los datos personales en{" "}
-          <strong>clawhub</strong>, el panel de control de copilotos IA
+          <strong>AI-Office Center</strong>, el panel de control de copilotos IA
           ofrecido bajo arquitectura on-prem.
         </p>
 
@@ -41,7 +41,7 @@ export default function PrivacyPage() {
           1. Arquitectura y separación de datos
         </h2>
         <p>
-          clawhub está diseñado de forma que los datos sensibles del
+          AI-Office Center está diseñado de forma que los datos sensibles del
           trabajador (correo, conversaciones con clientes, documentos
           internos, memoria del agente) residan{" "}
           <strong>exclusivamente en el PC del trabajador</strong>. El control
@@ -57,7 +57,7 @@ export default function PrivacyPage() {
             Snapshots de configuración del agente (SOPs, plantillas) — sin
             datos personales de los clientes finales del trabajador
           </li>
-          <li>Logs de actividad (quién hizo qué acción en clawhub)</li>
+          <li>Logs de actividad (quién hizo qué acción en AI-Office Center)</li>
         </ul>
 
         <h2 className="font-display text-2xl font-semibold pt-4">
@@ -90,7 +90,7 @@ export default function PrivacyPage() {
             conversaciones.
           </li>
           <li>
-            <strong>Audit log</strong>: quién hizo qué acción en clawhub
+            <strong>Audit log</strong>: quién hizo qué acción en AI-Office Center
             (encolar comando, cambiar configuración, etc.).
           </li>
         </ul>
@@ -179,7 +179,7 @@ export default function PrivacyPage() {
           9. Cookies
         </h2>
         <p>
-          clawhub utiliza una única cookie técnica de sesión necesaria para
+          AI-Office Center utiliza una única cookie técnica de sesión necesaria para
           mantenerte autenticado. No usamos cookies de análisis ni de
           marketing.
         </p>

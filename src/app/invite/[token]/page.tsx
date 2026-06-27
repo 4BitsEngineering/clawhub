@@ -123,12 +123,12 @@ export default async function InvitePage({
       <Card className="card-paper border-0 shadow-none p-0 max-w-md w-full">
         <CardHeader className="px-6 pt-6">
           <CardTitle className="font-display text-2xl">
-            Invitación a clawhub
+            Invitación a AI-Office Center
           </CardTitle>
           <CardDescription>
             {invitation.firm?.name
               ? `Te han invitado a unirte a ${invitation.firm.name}`
-              : "Te han invitado como operator de clawhub"}
+              : "Te han invitado como operator de AI-Office Center"}
           </CardDescription>
         </CardHeader>
         <CardContent className="px-6 pb-6 space-y-4">

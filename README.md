@@ -1,11 +1,11 @@
-# clawhub
+# AI-Office Center
 
 > Control plane multi-tenant para flotas de copilotos IA on-prem.
 
-clawhub es el panel cloud que gestiona N firmas (asesorías, despachos, PYMES)
+AI-Office Center es el panel cloud que gestiona N firmas (asesorías, despachos, PYMES)
 y M instancias de OpenClaw Copilot desplegadas en los PCs de cada firma. Los
 datos sensibles del trabajador (correo, conversaciones, memoria del agente)
-NUNCA salen del PC. clawhub solo orquesta: pairing, comandos remotos,
+NUNCA salen del PC. AI-Office Center solo orquesta: pairing, comandos remotos,
 distribución de software, telemetría agregada.
 
 ## Para quién
@@ -22,7 +22,7 @@ distribución de software, telemetría agregada.
 
 ```
 ┌───────────────────────────────┐         ┌─────────────────────────────┐
-│  clawhub (Vercel + Supabase)  │         │      PC del trabajador      │
+│  AI-Office Center (Vercel+SB) │         │      PC del trabajador      │
 │                               │ ◄─ HTTPS┤                             │
 │  - Multi-tenant DB            │  outbound│  clawgents-desktop (.exe)   │
 │  - Stack manifest per firm    │  only   │   ├─ OpenClaw runtime       │
@@ -34,7 +34,7 @@ distribución de software, telemetría agregada.
 
 - El PC del trabajador **solo hace HTTPS saliente** al control plane.
 - No abre puertos entrantes, no necesita VPN, no expone credenciales.
-- Los bundles del software se descargan desde clawhub (vía manifest pinneado
+- Los bundles del software se descargan desde AI-Office Center (vía manifest pinneado
   por firma) tras el primer pairing.
 
 ## Stack técnico
@@ -99,7 +99,7 @@ los sube periódicamente a `/api/v0/usage`. Idempotente por `spanId`.
 
 ### Distribución del software
 
-clawhub funciona como package manager de su propio stack:
+AI-Office Center funciona como package manager de su propio stack:
 
 1. **Publica bundles** vía `scripts/release-bundle.ts` o auto-CI
    (`scripts/ci-templates/`)
@@ -145,7 +145,7 @@ login.
 DATABASE_URL=postgresql://...        # pooler de Supabase
 DIRECT_URL=postgresql://...          # conexión directa (para migrations)
 AUTH_SECRET=<openssl rand -base64 32>
-NEXT_PUBLIC_APP_URL=https://clawhub.tuempresa.com
+NEXT_PUBLIC_APP_URL=https://ai-officecenter.tuempresa.com
 
 # CI/CD auto-bundle (opcional)
 OPERATOR_API_KEY=<openssl rand -hex 32>
@@ -153,7 +153,7 @@ OPERATOR_API_KEY=<openssl rand -hex 32>
 # Cron offline-sweep (Vercel lo envía automáticamente si está en vercel.json)
 CRON_SECRET=<openssl rand -hex 32>
 
-# Soporte (opcional, default soporte@clawhub.es)
+# Soporte (opcional, default soporte@ai-officecenter.com)
 NEXT_PUBLIC_SUPPORT_EMAIL=soporte@tuempresa.com
 NEXT_PUBLIC_OPERATOR_ORG=Tu Empresa S.L.
 
@@ -242,7 +242,7 @@ clawhub/
 
 | Repo                     | Rol                                  |
 | ------------------------ | ------------------------------------ |
-| **clawhub**              | Control plane multi-tenant (este)    |
+| **AI-Office Center**     | Control plane multi-tenant (este)    |
 | `clawgents-desktop`      | Installer Electron + tray runtime    |
 | `autonomous-agents`      | Bridge runtime + work-console        |
 | `openclaw` (fork)        | Runtime gateway + CLI                |
@@ -260,4 +260,4 @@ Para detalle por fases y roadmap futuro ver
 
 ## Licencia
 
-Privado. © clawhub. Todos los derechos reservados.
+Privado. © AI-Office Center. Todos los derechos reservados.

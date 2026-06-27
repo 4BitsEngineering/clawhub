@@ -78,7 +78,7 @@ export default async function LoginPage({
       </div>
       <Card className="card-paper border-0 shadow-none w-full max-w-md relative">
         <CardHeader className="space-y-3">
-          <div className="eyebrow-chip self-start">clawhub · acceso</div>
+          <div className="eyebrow-chip self-start">AI-Office Center · acceso</div>
           <CardTitle className="font-display text-2xl">
             Entrar al panel
           </CardTitle>

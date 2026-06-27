@@ -45,7 +45,7 @@ export default async function NewFirmPage() {
           href="/operator"
           className="text-muted-foreground hover:text-foreground"
         >
-          ← clawhub
+          ← AI-Office Center
         </Link>
       </div>
 

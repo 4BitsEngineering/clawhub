@@ -121,7 +121,7 @@ export default async function OperatorFirmDetailPage({
           href="/operator"
           className="text-muted-foreground hover:text-foreground"
         >
-          ← clawhub
+          ← AI-Office Center
         </Link>
       </div>
 

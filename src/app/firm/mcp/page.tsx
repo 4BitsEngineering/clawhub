@@ -763,7 +763,7 @@ export default async function FirmMcpPage({
             <CardDescription>
               Cruz: filas = PCs de la firma, columnas = MCP servers
               instalados. ✓ verde = el PC reporta tenerlo cargado en su
-              último heartbeat. ⏳ naranja = instalado en clawhub pero
+              último heartbeat. ⏳ naranja = instalado en AI-Office Center pero
               todavía no en el PC (sincroniza arriba).
             </CardDescription>
           </CardHeader>
@@ -906,14 +906,14 @@ export default async function FirmMcpPage({
         </CardHeader>
         <CardContent className="px-6 pb-6 text-sm text-muted-foreground space-y-2">
           <p>
-            Cuando activas un MCP aquí, en el próximo heartbeat (~60s) clawhub
+            Cuando activas un MCP aquí, en el próximo heartbeat (~60s) AI-Office Center
             encola un comando <code>push_mcp_config</code> a tus PCs. El agent
             local edita <code>openclaw.json</code>, ejecuta{" "}
             <code>npm run mcp:config</code> y reinicia el bridge.
           </p>
           <p>
             <strong>Para los MCP que requieren secrets</strong> (🔐) — el worker
-            tiene que configurarlos UNA VEZ desde el AI Office local. clawhub
+            tiene que configurarlos UNA VEZ desde el AI Office local. AI-Office Center
             nunca guarda tokens ni passwords (los datos no salen del PC).
           </p>
         </CardContent>

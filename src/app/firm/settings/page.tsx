@@ -30,7 +30,7 @@ import {
 
 export const dynamic = "force-dynamic";
 
-const SUPPORT_EMAIL = process.env.NEXT_PUBLIC_SUPPORT_EMAIL || "soporte@clawhub.es";
+const SUPPORT_EMAIL = process.env.NEXT_PUBLIC_SUPPORT_EMAIL || "soporte@ai-officecenter.com";
 
 export default async function FirmSettingsPage({
   searchParams,
@@ -95,7 +95,7 @@ export default async function FirmSettingsPage({
   }
 
   const requestUpgradeUrl = (() => {
-    const subject = `[clawhub] Solicitud ampliar plan — ${firm.name}`;
+    const subject = `[AI-Office Center] Solicitud ampliar plan — ${firm.name}`;
     const body = [
       `Hola,`,
       ``,
@@ -141,7 +141,7 @@ export default async function FirmSettingsPage({
             Nombre de la firma
           </CardTitle>
           <CardDescription>
-            Cómo aparece tu firma en clawhub y en los wizards de pairing.
+            Cómo aparece tu firma en AI-Office Center y en los wizards de pairing.
           </CardDescription>
         </CardHeader>
         <CardContent className="px-6 pb-6">
@@ -296,7 +296,7 @@ export default async function FirmSettingsPage({
             <p className="text-xs text-muted-foreground mt-2 pl-2">
               Si necesitas fijar una versión específica del runtime o el
               bridge, pídelo a soporte — son cambios menos frecuentes y los
-              gestiona el operator de clawhub.
+              gestiona el operator de AI-Office Center.
             </p>
           </details>
         </CardContent>

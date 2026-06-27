@@ -18,7 +18,7 @@ export const COMMAND_KINDS = {
   },
   reload_skills: {
     label: "Recargar skills",
-    description: "Llama a POST /api/skills/sync del bridge local: re-escanea el directorio de skills del overlay y recarga el registry. Útil tras publicar una skill desde clawhub si el agent aún la usa cacheada.",
+    description: "Llama a POST /api/skills/sync del bridge local: re-escanea el directorio de skills del overlay y recarga el registry. Útil tras publicar una skill desde AI-Office Center si el agent aún la usa cacheada.",
     args: z.object({}).optional(),
   },
   fetch_logs: {
@@ -70,7 +70,7 @@ export const COMMAND_KINDS = {
   },
   snapshot_to_baseline: {
     label: "Crear baseline desde esta instancia",
-    description: "Lee el estado actual del overlay (openclaw.json + workspaces + enterprise + skills) y lo sube a clawhub como nuevo baseline de la firma. NO incluye secrets (.env).",
+    description: "Lee el estado actual del overlay (openclaw.json + workspaces + enterprise + skills) y lo sube a AI-Office Center como nuevo baseline de la firma. NO incluye secrets (.env).",
     args: z.object({
       label: z.string().min(1).max(200),
       description: z.string().max(2000).nullable().optional(),
@@ -78,7 +78,7 @@ export const COMMAND_KINDS = {
   },
   reset_to_baseline: {
     label: "Restaurar a baseline",
-    description: "Descarga un baseline de clawhub y lo aplica al overlay local. Hace backup del estado actual antes. Preserva los MEMORY.md de cada agente (aprendizaje del trabajador no se pisa).",
+    description: "Descarga un baseline de AI-Office Center y lo aplica al overlay local. Hace backup del estado actual antes. Preserva los MEMORY.md de cada agente (aprendizaje del trabajador no se pisa).",
     args: z.object({
       baseline_id: z.string().uuid(),
     }),
@@ -89,8 +89,8 @@ export const COMMAND_KINDS = {
     args: z.object({}).optional(),
   },
   push_mcp_config: {
-    label: "Sincronizar config MCP desde clawhub",
-    description: "Descarga la lista de MCP servers instalados/activos de esta firma desde clawhub (FirmMcpInstall + McpServerCatalog) y reescribe la sección mcpServers de openclaw.json local. Después corre mcp:config y recarga. NO toca secrets — solo metadata.",
+    label: "Sincronizar config MCP desde AI-Office Center",
+    description: "Descarga la lista de MCP servers instalados/activos de esta firma desde AI-Office Center (FirmMcpInstall + McpServerCatalog) y reescribe la sección mcpServers de openclaw.json local. Después corre mcp:config y recarga. NO toca secrets — solo metadata.",
     args: z.object({}).optional(),
   },
   notify_user: {

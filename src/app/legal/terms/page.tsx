@@ -6,12 +6,12 @@
 import Link from "next/link";
 
 export const metadata = {
-  title: "Términos de Servicio — clawhub",
+  title: "Términos de Servicio — AI-Office Center",
 };
 
 export default function TermsPage() {
   const updatedAt = "2026-05-17";
-  const supportEmail = process.env.NEXT_PUBLIC_SUPPORT_EMAIL || "soporte@clawhub.es";
+  const supportEmail = process.env.NEXT_PUBLIC_SUPPORT_EMAIL || "soporte@ai-officecenter.com";
   const operatorOrg = process.env.NEXT_PUBLIC_OPERATOR_ORG || "[NOMBRE DE LA EMPRESA OPERADORA]";
 
   return (
@@ -32,9 +32,9 @@ export default function TermsPage() {
           1. Objeto
         </h2>
         <p>
-          Estos términos regulan el uso del servicio <strong>clawhub</strong>{" "}
+          Estos términos regulan el uso del servicio <strong>AI-Office Center</strong>{" "}
           ofrecido por <strong>{operatorOrg}</strong> (en adelante &ldquo;el
-          Operador&rdquo;). clawhub es un panel de control para gestionar
+          Operador&rdquo;). AI-Office Center es un panel de control para gestionar
           instancias de OpenClaw desplegadas en los PCs de la empresa
           cliente.
         </p>
@@ -104,7 +104,7 @@ export default function TermsPage() {
         <p>
           El cliente conserva la propiedad de sus SOPs, plantillas y
           configuración. El Operador conserva la propiedad del software y
-          de la marca clawhub.
+          de la marca AI-Office Center.
         </p>
 
         <h2 className="font-display text-2xl font-semibold pt-4">

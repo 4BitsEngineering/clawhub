@@ -35,7 +35,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         // eslint-disable-next-line no-console
         console.log(
           `\n${banner}\n` +
-            `🔐  clawhub · magic link\n` +
+            `🔐  AI-Office Center · magic link\n` +
             `    para: ${identifier}\n` +
             `    abre: ${url}\n` +
             `${banner}\n`,

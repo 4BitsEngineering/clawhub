@@ -54,7 +54,7 @@ export default async function OperatorPage() {
         <div className="space-y-2">
           <div className="eyebrow-chip">operator</div>
           <h1 className="font-display text-3xl sm:text-4xl font-semibold tracking-tight">
-            clawhub
+            AI-Office Center
           </h1>
           <p className="text-sm text-muted-foreground">
             {session.user.email}
@@ -180,7 +180,7 @@ export default async function OperatorPage() {
           <CardTitle className="font-display text-xl">Firmas</CardTitle>
           <CardDescription>
             {firms.length} {firms.length === 1 ? "tenant" : "tenants"} en
-            clawhub.
+            AI-Office Center.
           </CardDescription>
         </CardHeader>
         <CardContent className="px-2 sm:px-4 pb-4">
