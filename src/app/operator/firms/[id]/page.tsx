@@ -4,10 +4,11 @@ import { revalidatePath } from "next/cache";
 import { db } from "@/lib/db";
 import { generatePairingCode } from "@/lib/tokens";
 import { requireOperator } from "@/lib/session";
+import { recordActivity } from "@/lib/activity";
 import { AutoRefresh } from "@/components/auto-refresh";
 import { OperatorShell } from "@/components/operator-shell";
 import { FirmSubnav } from "@/components/firm-subnav";
-import { Button, buttonVariants } from "@/components/ui/button";
+import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
@@ -108,6 +109,35 @@ export default async function OperatorFirmDetailPage({
     revalidatePath(`/operator/firms/${id}`);
   }
 
+  // Kill-switch POR FIRMA (impago/baja). Distinto del kill por instancia:
+  // suspende la firma ENTERA → el heartbeat cascadea instance_status:"disabled"
+  // a TODAS sus instancias y el bridge corta el acceso (403). Replica la lógica
+  // de POST /api/operator/firms/[id]/{suspend,resume} para tener botón en la UI
+  // (antes solo era accionable por curl → kill-switch inusable en la práctica).
+  async function setFirmSuspendedAction(formData: FormData) {
+    "use server";
+    const session = await requireOperator(); // server action: reautenticar
+    const suspend = formData.get("suspend") === "1";
+    const target = await db.firm.findUnique({ where: { id }, select: { name: true } });
+    if (!target) return;
+    await db.firm.update({
+      where: { id },
+      data: suspend
+        ? { status: "suspended", suspendedAt: new Date(), suspendedReason: "manual" }
+        : { status: "active", suspendedAt: null, suspendedReason: null },
+    });
+    await recordActivity({
+      kind: suspend ? "firm.suspended" : "firm.resumed",
+      summary: `${suspend ? "Suspendió" : "Reactivó"} la firma ${target.name}${suspend ? " (manual)" : ""}`,
+      firmId: id,
+      actor: session,
+      metadata: suspend ? { reason: "manual" } : {},
+    });
+    revalidatePath(`/operator/firms/${id}`);
+  }
+
+  const firmSuspended = firm.status !== "active";
+
   const onlineCount = firm.instances.filter(
     (i) =>
       i.lastHeartbeatAt &&
@@ -121,6 +151,26 @@ export default async function OperatorFirmDetailPage({
       <FirmSubnav firmId={firm.id} firmName={firm.name} />
 
       <div className="container-page py-8 space-y-8">
+        {/* Kill-switch POR FIRMA (impago/baja): suspende la firma entera → el
+            heartbeat cascadea instance_status:"disabled" a sus instancias y el
+            bridge corta el acceso (403). Reactivar lo revierte. */}
+        <div className="flex items-center justify-end gap-2 flex-wrap">
+          {firmSuspended && (
+            <Badge variant="destructive" className="text-sm">
+              suspendida
+            </Badge>
+          )}
+          <form action={setFirmSuspendedAction}>
+            <input type="hidden" name="suspend" value={firmSuspended ? "0" : "1"} />
+            <Button
+              type="submit"
+              variant={firmSuspended ? "outline" : "destructive"}
+              size="sm"
+            >
+              {firmSuspended ? "Reactivar firma" : "Suspender firma"}
+            </Button>
+          </form>
+        </div>
 
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
         <Card>

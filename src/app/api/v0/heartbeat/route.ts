@@ -37,7 +37,11 @@ export async function POST(req: NextRequest) {
 
   const firm = instance.firm;
   // Firma suspendida (impago, baja, etc.) → seguimos monitorizando la
-  // instancia (200 + heartbeat normal) pero NO le despachamos comandos.
+  // instancia (200 + heartbeat normal) y NO le despachamos comandos, PERO
+  // además cortamos el servicio: la suspensión de firma cascadea a
+  // instance_status:"disabled" (ver más abajo), igual que el kill-switch por
+  // instancia. Sin esto, una firma impagada conservaba el servicio completo
+  // (solo se bloqueaban comandos remotos nuevos → kill-switch inefectivo).
   const firmActive = firm.status === "active";
 
   let body: z.infer<typeof HeartbeatBody>;
@@ -140,9 +144,18 @@ export async function POST(req: NextRequest) {
     next_heartbeat_in_s: 60,
     firm_status: firm.status,
     suspended_reason: firm.suspendedReason ?? undefined,
-    // Kill-switch por instancia: el bridge bloquea el acceso si "disabled".
-    instance_status: instance.disabledAt ? "disabled" : "active",
-    disabled_reason: instance.disabledReason ?? undefined,
+    // Kill-switch: el bridge bloquea el acceso (403) si instance_status es
+    // "disabled". Cascadean DOS causas → "disabled":
+    //   1. kill-switch por instancia (instance.disabledAt)
+    //   2. firma suspendida (impago/baja: firm.status !== "active")
+    // El bridge ya lee instance_status, así que esto corta también en las
+    // instancias YA desplegadas sin re-publicar overlay.
+    instance_status: instance.disabledAt || !firmActive ? "disabled" : "active",
+    disabled_reason:
+      instance.disabledReason ??
+      (!firmActive
+        ? firm.suspendedReason ?? "Suscripción suspendida"
+        : undefined),
     commands: commandsToDispatch.map((c) => ({
       id: c.id,
       kind: c.kind,
