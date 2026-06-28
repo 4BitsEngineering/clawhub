@@ -18,6 +18,7 @@ import { db } from "@/lib/db";
 import { requireOperator } from "@/lib/session";
 import { recordActivity } from "@/lib/activity";
 import { AutoRefresh } from "@/components/auto-refresh";
+import { OperatorShell } from "@/components/operator-shell";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -85,7 +86,6 @@ export default async function MassActionsPage({
     kind?: string;
   }>;
 }) {
-  await requireOperator();
   const sp = await searchParams;
   const scope = parseScope(sp.scope ?? null);
   const firmId = sp.firmId || null;
@@ -173,27 +173,20 @@ export default async function MassActionsPage({
     selectedKind,
   );
 
-  return (
-    <main className="container-page min-h-screen py-8 sm:py-12 space-y-8">
-      <AutoRefresh intervalMs={20_000} />
+  const session = await requireOperator();
 
-      <header className="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-4">
-        <div className="space-y-2">
-          <div className="eyebrow-chip">comandos masivos</div>
-          <h1 className="font-display text-3xl sm:text-4xl font-semibold tracking-tight">
-            Comandos masivos
-          </h1>
-          <p className="text-sm text-muted-foreground">
-            Envía un comando a todos los PCs de una empresa (o de todas) de una
-            sola vez. Cada PC lo recibirá en su próxima conexión (~60 s).
-          </p>
-        </div>
-        <Link
-          href="/operator"
-          className="text-sm underline text-muted-foreground"
-        >
-          ← Panel de operador
-        </Link>
+  return (
+    <OperatorShell email={session.user.email}>
+      <AutoRefresh intervalMs={20_000} />
+      <div className="space-y-8">
+      <header className="space-y-2">
+        <h1 className="font-display text-2xl sm:text-3xl font-semibold tracking-tight">
+          Comandos masivos
+        </h1>
+        <p className="text-sm text-muted-foreground">
+          Envía un comando a todos los PCs de una empresa (o de todas) de una
+          sola vez. Cada PC lo recibirá en su próxima conexión (~60 s).
+        </p>
       </header>
 
       <Card className="card-paper border-0 shadow-none p-0">
@@ -352,6 +345,7 @@ export default async function MassActionsPage({
           <form id="filter-form" method="get" action="/operator/mass-actions" />
         </CardContent>
       </Card>
-    </main>
+      </div>
+    </OperatorShell>
   );
 }

@@ -3,6 +3,8 @@ import { notFound, redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 import { db } from "@/lib/db";
 import { requireOperator } from "@/lib/session";
+import { OperatorShell } from "@/components/operator-shell";
+import { FirmSubnav } from "@/components/firm-subnav";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -21,7 +23,7 @@ export default async function EditFirmPage({
 }: {
   params: Promise<{ id: string }>;
 }) {
-  await requireOperator();
+  const session = await requireOperator();
   const { id } = await params;
   const firm = await db.firm.findUnique({ where: { id } });
   if (!firm) notFound();
@@ -61,22 +63,9 @@ export default async function EditFirmPage({
   }
 
   return (
-    <main className="container-page min-h-screen py-8 sm:py-12 max-w-2xl space-y-8">
-      <div className="text-sm">
-        <Link
-          href={`/operator/firms/${id}`}
-          className="text-muted-foreground hover:text-foreground"
-        >
-          ← {firm.name}
-        </Link>
-      </div>
-
-      <header className="space-y-2">
-        <div className="eyebrow-chip">editar tenant</div>
-        <h1 className="font-display text-3xl sm:text-4xl font-semibold tracking-tight">
-          Editar firma
-        </h1>
-      </header>
+    <OperatorShell email={session.user.email} flush>
+      <FirmSubnav firmId={id} firmName={firm.name} />
+      <div className="container-page py-8 max-w-2xl space-y-8">
 
       <Card className="card-paper border-0 shadow-none">
         <CardHeader>
@@ -179,6 +168,7 @@ export default async function EditFirmPage({
           </form>
         </CardContent>
       </Card>
-    </main>
+      </div>
+    </OperatorShell>
   );
 }

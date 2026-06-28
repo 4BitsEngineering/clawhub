@@ -14,6 +14,7 @@ import Link from "next/link";
 import { requireOperator } from "@/lib/session";
 import { db } from "@/lib/db";
 import { AutoRefresh } from "@/components/auto-refresh";
+import { OperatorShell } from "@/components/operator-shell";
 import { ActivityTimeline } from "@/components/activity-timeline";
 import {
   Card,
@@ -46,7 +47,7 @@ export default async function OperatorActivityPage({
     cursor?: string;
   }>;
 }) {
-  await requireOperator();
+  const session = await requireOperator();
   const sp = await searchParams;
   const firmId = sp.firmId || null;
   const instanceId = sp.instanceId || null;
@@ -90,26 +91,17 @@ export default async function OperatorActivityPage({
     : null;
 
   return (
-    <main className="container-page min-h-screen py-8 sm:py-12 space-y-8">
+    <OperatorShell email={session.user.email}>
       <AutoRefresh intervalMs={15_000} />
-
-      <header className="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-4">
-        <div className="space-y-2">
-          <div className="eyebrow-chip">registro de actividad</div>
-          <h1 className="font-display text-3xl sm:text-4xl font-semibold tracking-tight">
-            Registro de actividad
-          </h1>
-          <p className="text-sm text-muted-foreground">
-            Historial de operaciones: altas de PCs, comandos remotos,
-            baselines, cambios de versión y configuración.
-          </p>
-        </div>
-        <Link
-          href="/operator"
-          className="text-sm underline text-muted-foreground"
-        >
-          ← Panel de operador
-        </Link>
+      <div className="space-y-8">
+      <header className="space-y-2">
+        <h1 className="font-display text-2xl sm:text-3xl font-semibold tracking-tight">
+          Registro de actividad
+        </h1>
+        <p className="text-sm text-muted-foreground">
+          Historial de operaciones: altas de PCs, comandos remotos,
+          baselines, cambios de versión y configuración.
+        </p>
       </header>
 
       <Card className="card-paper border-0 shadow-none p-0">
@@ -195,6 +187,7 @@ export default async function OperatorActivityPage({
           )}
         </CardContent>
       </Card>
-    </main>
+      </div>
+    </OperatorShell>
   );
 }

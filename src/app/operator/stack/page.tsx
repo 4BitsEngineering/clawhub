@@ -4,6 +4,7 @@ import { db } from "@/lib/db";
 import { requireOperator } from "@/lib/session";
 import { recordActivity } from "@/lib/activity";
 import { AutoRefresh } from "@/components/auto-refresh";
+import { OperatorShell } from "@/components/operator-shell";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -25,7 +26,7 @@ import { Badge } from "@/components/ui/badge";
 export const dynamic = "force-dynamic";
 
 export default async function OperatorStackPage() {
-  await requireOperator();
+  const session = await requireOperator();
 
   const [bundles, firms] = await Promise.all([
     db.stackBundle.findMany({
@@ -102,17 +103,11 @@ export default async function OperatorStackPage() {
   }
 
   return (
-    <main className="container-page min-h-screen py-8 sm:py-12 space-y-8">
+    <OperatorShell email={session.user.email}>
       <AutoRefresh intervalMs={10_000} />
-
+      <div className="space-y-8">
       <header className="space-y-2">
-        <div className="text-sm">
-          <Link href="/operator" className="text-muted-foreground hover:text-foreground">
-            ← Panel de operador
-          </Link>
-        </div>
-        <div className="eyebrow-chip">versiones de software</div>
-        <h1 className="font-display text-3xl sm:text-4xl font-semibold tracking-tight">
+        <h1 className="font-display text-2xl sm:text-3xl font-semibold tracking-tight">
           Versiones de software
         </h1>
         <p className="text-sm text-muted-foreground">
@@ -303,6 +298,7 @@ export default async function OperatorStackPage() {
           ))}
         </CardContent>
       </Card>
-    </main>
+      </div>
+    </OperatorShell>
   );
 }

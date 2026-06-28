@@ -3,6 +3,8 @@ import { notFound } from "next/navigation";
 import { db } from "@/lib/db";
 import { requireOperator } from "@/lib/session";
 import { AutoRefresh } from "@/components/auto-refresh";
+import { OperatorShell } from "@/components/operator-shell";
+import { FirmSubnav } from "@/components/firm-subnav";
 import { buttonVariants } from "@/components/ui/button";
 import {
   Card,
@@ -28,7 +30,7 @@ export default async function FirmSkillsPage({
 }: {
   params: Promise<{ id: string }>;
 }) {
-  await requireOperator();
+  const session = await requireOperator();
   const { id } = await params;
 
   const firm = await db.firm.findUnique({
@@ -42,40 +44,10 @@ export default async function FirmSkillsPage({
   const activeCount = firm.skills.filter((s) => s.active).length;
 
   return (
-    <main className="container-page min-h-screen py-8 sm:py-12 space-y-8">
+    <OperatorShell email={session.user.email} flush>
       <AutoRefresh intervalMs={15_000} />
-
-      <div className="text-sm">
-        <Link
-          href={`/operator/firms/${firm.id}`}
-          className="text-muted-foreground hover:text-foreground"
-        >
-          ← {firm.name}
-        </Link>
-      </div>
-
-      <header className="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-4">
-        <div className="space-y-2">
-          <div className="eyebrow-chip">skills · tier firma</div>
-          <h1 className="font-display text-3xl sm:text-4xl font-semibold tracking-tight">
-            {firm.name}
-          </h1>
-          <p className="text-sm text-muted-foreground">
-            SOPs, plantillas y procedimientos firma-wide. Las instancias los
-            descargan automáticamente al próximo heartbeat.
-          </p>
-        </div>
-        <Link
-          href={`/operator/firms/${firm.id}/skills/new`}
-          className={buttonVariants() + " h-10 px-4 self-start sm:self-auto"}
-          style={{
-            backgroundColor: "var(--brand)",
-            color: "var(--brand-foreground)",
-          }}
-        >
-          + Nuevo skill
-        </Link>
-      </header>
+      <FirmSubnav firmId={firm.id} firmName={firm.name} />
+      <div className="container-page py-8 space-y-8">
 
       <Card className="card-paper border-0 shadow-none p-0">
         <CardHeader className="px-6 pt-6">
@@ -153,6 +125,7 @@ export default async function FirmSkillsPage({
           )}
         </CardContent>
       </Card>
-    </main>
+      </div>
+    </OperatorShell>
   );
 }

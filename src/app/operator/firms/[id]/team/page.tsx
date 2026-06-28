@@ -11,6 +11,8 @@ import {
   prefixForOverlay,
   type ProvisionedAgent,
 } from "@/lib/install-plan";
+import { OperatorShell } from "@/components/operator-shell";
+import { FirmSubnav } from "@/components/firm-subnav";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -56,7 +58,7 @@ export default async function FirmTeamPage({
 }: {
   params: Promise<{ id: string }>;
 }) {
-  await requireOperator();
+  const session = await requireOperator();
   const { id } = await params;
 
   const firm = await db.firm.findUnique({
@@ -302,29 +304,9 @@ export default async function FirmTeamPage({
   const inTeam = new Set(team.map((t) => t.agentKey));
 
   return (
-    <main className="container-page min-h-screen py-8 sm:py-12 space-y-8 max-w-5xl">
-      <div className="text-sm">
-        <Link
-          href={`/operator/firms/${firm.id}`}
-          className="text-muted-foreground hover:text-foreground"
-        >
-          ← {firm.name}
-        </Link>
-      </div>
-
-      <header className="space-y-2">
-        <div className="eyebrow-chip">equipo provisionado</div>
-        <h1 className="font-display text-3xl sm:text-4xl font-semibold tracking-tight">
-          Equipo de {firm.name}
-        </h1>
-        <p className="text-sm text-muted-foreground">
-          Compón el equipo de agentes del cliente: parte de una plantilla por
-          sector o añade roles del catálogo, y ajusta la identidad (nombre,
-          color, voz). Prefijo de instalación:{" "}
-          <code className="text-xs">{prefix}</code>
-          {firm.overlayId ? ` · overlay ${firm.overlayId}` : ""}.
-        </p>
-      </header>
+    <OperatorShell email={session.user.email} flush>
+      <FirmSubnav firmId={firm.id} firmName={firm.name} />
+      <div className="container-page py-8 space-y-8">
 
       {/* Plantilla de sector (alta en un clic) */}
       <Card>
@@ -616,6 +598,7 @@ export default async function FirmTeamPage({
           )}
         </CardContent>
       </Card>
-    </main>
+      </div>
+    </OperatorShell>
   );
 }

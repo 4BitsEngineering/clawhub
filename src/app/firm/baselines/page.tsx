@@ -36,6 +36,8 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { ConfirmForm } from "@/components/confirm-form";
+import { OperatorShell } from "@/components/operator-shell";
+import { FirmSubnav } from "@/components/firm-subnav";
 
 export const dynamic = "force-dynamic";
 
@@ -133,45 +135,27 @@ export default async function FirmBaselinesPage({
   const totalBytes = baselines.reduce((s, b) => s + b.totalBytes, 0);
   const promoted = baselines.find((b) => b.isPromoted);
 
-  return (
-    <main className="container-page min-h-screen py-8 sm:py-12 space-y-8">
-      <div className="text-sm">
-        <Link
-          href={
-            session.user.role === "FIRM_ADMIN"
-              ? "/firm"
-              : `/operator/firms/${firmId}`
-          }
-          className="text-muted-foreground hover:text-foreground"
-        >
-          ← {firm.name}
-        </Link>
-      </div>
+  const isOperator = session.user.role === "OPERATOR";
 
-      <header className="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-4">
-        <div className="space-y-2">
-          <div className="eyebrow-chip">{firm.name} · baselines</div>
-          <h1 className="font-display text-3xl sm:text-4xl font-semibold tracking-tight">
+  const subheader = isOperator
+    ? <FirmSubnav firmId={firmId} firmName={firm.name} />
+    : (
+      <div className="border-b border-border bg-muted/40">
+        <div className="container-page py-5 space-y-1">
+          <p className="text-xs text-muted-foreground">
+            <Link href="/firm" className="hover:text-foreground">
+              {firm.name}
+            </Link>{" "}/ Baselines
+          </p>
+          <h1 className="font-display text-2xl sm:text-3xl font-semibold tracking-tight">
             Catálogo de baselines
           </h1>
-          <p className="text-sm text-muted-foreground">
-            Snapshots canónicos del overlay de la firma. Restaura un PC roto a
-            uno de estos en 30 s · {baselines.length} baselines ·{" "}
-            {(totalBytes / 1024).toFixed(1)} KB en total
-            {promoted && (
-              <>
-                {" "}·{" "}
-                <Link
-                  href={`/firm/baselines/${promoted.id}`}
-                  className="underline"
-                >
-                  ⭐ canónico v{promoted.version}
-                </Link>
-              </>
-            )}
-          </p>
         </div>
-      </header>
+      </div>
+    );
+
+  const content = (
+    <div className="container-page py-8 space-y-8">
 
       {baselines.length === 0 ? (
         <Card className="card-paper border-0 shadow-none p-0">
@@ -336,6 +320,22 @@ export default async function FirmBaselinesPage({
           </p>
         </CardContent>
       </Card>
+    </div>
+  );
+
+  if (isOperator) {
+    return (
+      <OperatorShell email={session.user.email} flush>
+        {subheader}
+        {content}
+      </OperatorShell>
+    );
+  }
+
+  return (
+    <main className="min-h-screen">
+      {subheader}
+      {content}
     </main>
   );
 }

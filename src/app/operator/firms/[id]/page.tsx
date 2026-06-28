@@ -5,6 +5,8 @@ import { db } from "@/lib/db";
 import { generatePairingCode } from "@/lib/tokens";
 import { requireOperator } from "@/lib/session";
 import { AutoRefresh } from "@/components/auto-refresh";
+import { OperatorShell } from "@/components/operator-shell";
+import { FirmSubnav } from "@/components/firm-subnav";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -32,7 +34,7 @@ export default async function OperatorFirmDetailPage({
 }: {
   params: Promise<{ id: string }>;
 }) {
-  await requireOperator();
+  const session = await requireOperator();
   const { id } = await params;
 
   const firm = await db.firm.findUnique({
@@ -113,65 +115,12 @@ export default async function OperatorFirmDetailPage({
   ).length;
 
   return (
-    <main className="container-page min-h-screen py-8 sm:py-12 space-y-8">
+    <OperatorShell email={session.user.email} flush>
       <AutoRefresh intervalMs={10_000} />
 
-      <div className="text-sm">
-        <Link
-          href="/operator"
-          className="text-muted-foreground hover:text-foreground"
-        >
-          ← Panel de operador
-        </Link>
-      </div>
+      <FirmSubnav firmId={firm.id} firmName={firm.name} />
 
-      <header className="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-4">
-        <div className="space-y-2">
-          <div className="eyebrow-chip">detalle de empresa</div>
-          <h1 className="font-display text-3xl sm:text-4xl font-semibold tracking-tight">
-            {firm.name}
-          </h1>
-          <p className="text-sm text-muted-foreground">
-            Creada {firm.createdAt.toLocaleDateString("es-ES")} ·{" "}
-            <code className="text-xs">{firm.id}</code>
-          </p>
-        </div>
-        <div className="flex items-center gap-2 self-start sm:self-auto">
-          <Badge variant="secondary" className="text-sm">
-            {firm.plan}
-          </Badge>
-          <Link
-            href={`/operator/firms/${firm.id}/team`}
-            className={buttonVariants({ variant: "outline", size: "sm" })}
-          >
-            Equipo
-          </Link>
-          <Link
-            href={`/operator/firms/${firm.id}/skills`}
-            className={buttonVariants({ variant: "outline", size: "sm" })}
-          >
-            Skills
-          </Link>
-          <Link
-            href={`/operator/firms/${firm.id}/users`}
-            className={buttonVariants({ variant: "outline", size: "sm" })}
-          >
-            Usuarios
-          </Link>
-          <Link
-            href={`/firm/baselines?firmId=${firm.id}`}
-            className={buttonVariants({ variant: "outline", size: "sm" })}
-          >
-            Baselines
-          </Link>
-          <Link
-            href={`/operator/firms/${firm.id}/edit`}
-            className={buttonVariants({ variant: "outline", size: "sm" })}
-          >
-            Editar
-          </Link>
-        </div>
-      </header>
+      <div className="container-page py-8 space-y-8">
 
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
         <Card>
@@ -400,6 +349,7 @@ export default async function OperatorFirmDetailPage({
           )}
         </CardContent>
       </Card>
-    </main>
+      </div>
+    </OperatorShell>
   );
 }

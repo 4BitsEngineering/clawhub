@@ -12,6 +12,8 @@ import { db } from "@/lib/db";
 import { requireOperator } from "@/lib/session";
 import { recordActivity } from "@/lib/activity";
 import { AutoRefresh } from "@/components/auto-refresh";
+import { OperatorShell } from "@/components/operator-shell";
+import { FirmSubnav } from "@/components/firm-subnav";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -53,7 +55,7 @@ export default async function OperatorFirmUsersPage({
   params: Promise<{ id: string }>;
   searchParams: Promise<{ inviteUrl?: string }>;
 }) {
-  await requireOperator();
+  const session = await requireOperator();
   const { id } = await params;
   const sp = await searchParams;
   const baseUrl = await detectBaseUrl();
@@ -127,27 +129,10 @@ export default async function OperatorFirmUsersPage({
   }
 
   return (
-    <main className="container-page min-h-screen py-8 sm:py-12 space-y-8">
+    <OperatorShell email={session.user.email} flush>
       <AutoRefresh intervalMs={10_000} />
-
-      <header className="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-4">
-        <div className="space-y-2">
-          <div className="eyebrow-chip">operator · {firm.name}</div>
-          <h1 className="font-display text-3xl sm:text-4xl font-semibold tracking-tight">
-            Usuarios
-          </h1>
-          <p className="text-sm text-muted-foreground">
-            {users.length} usuarios actuales · {invitations.length} invitaciones
-            recientes
-          </p>
-        </div>
-        <Link
-          href={`/operator/firms/${id}`}
-          className="text-sm underline text-muted-foreground"
-        >
-          ← Volver a {firm.name}
-        </Link>
-      </header>
+      <FirmSubnav firmId={id} firmName={firm.name} />
+      <div className="container-page py-8 space-y-8">
 
       {sp.inviteUrl && (
         <Card className="card-paper border-0 shadow-none p-0 border-l-4 border-l-green-500">
@@ -308,6 +293,7 @@ export default async function OperatorFirmUsersPage({
           </CardContent>
         </Card>
       )}
-    </main>
+      </div>
+    </OperatorShell>
   );
 }

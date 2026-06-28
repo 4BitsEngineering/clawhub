@@ -2,8 +2,7 @@ import Link from "next/link";
 import { db } from "@/lib/db";
 import { requireOperator } from "@/lib/session";
 import { AutoRefresh } from "@/components/auto-refresh";
-import { SignOutButton } from "@/components/sign-out-button";
-import { ThemeToggle } from "@/components/theme-toggle";
+import { OperatorShell } from "@/components/operator-shell";
 import { SearchInput } from "@/components/search-input";
 import {
   Card,
@@ -88,73 +87,10 @@ export default async function OperatorPage({
   const occupancy =
     totalSeats > 0 ? Math.round((totalInstances / totalSeats) * 100) : 0;
 
-  const navItems = [
-    { href: "/operator/firms/new", label: "Nueva empresa", primary: true },
-    { href: "/operator/mass-actions", label: "Comandos masivos" },
-    { href: "/operator/stack", label: "Stack" },
-    { href: "/operator/mcp", label: "MCP" },
-    { href: "/operator/activity", label: "Actividad" },
-  ];
-
   return (
-    <main className="min-h-screen">
+    <OperatorShell email={session.user.email}>
       <AutoRefresh intervalMs={10_000} />
-
-      {/* ── Hero header con spotlight ── */}
-      <div className="relative overflow-hidden border-b border-border">
-        <div
-          aria-hidden
-          className="spotlight pointer-events-none absolute inset-x-0 top-0 h-full opacity-60"
-        />
-        <div className="container-page relative py-10 sm:py-14 space-y-6">
-          <div className="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-4">
-            <div className="space-y-2">
-              <div className="eyebrow-chip self-start">AI-Office Center</div>
-              <h1 className="font-display text-3xl sm:text-4xl font-semibold tracking-tight">
-                Panel de operador
-              </h1>
-              <p className="text-sm text-muted-foreground max-w-lg">
-                Vista global de todas las empresas, instancias y alertas de la
-                plataforma. Sesión: <span className="font-medium text-foreground">{session.user.email}</span>
-              </p>
-            </div>
-            <div className="flex items-center gap-2 self-start sm:self-auto shrink-0">
-              <ThemeToggle />
-              <SignOutButton />
-            </div>
-          </div>
-
-          {/* Nav pills */}
-          <nav className="flex flex-wrap items-center gap-2">
-            {navItems.map((item) => (
-              <Link
-                key={item.href}
-                href={item.href}
-                className={
-                  item.primary
-                    ? buttonVariants({ size: "sm" }) +
-                      " h-9 px-4 text-xs font-semibold shadow-sm"
-                    : buttonVariants({ variant: "secondary", size: "sm" }) +
-                      " h-9 px-4 text-xs"
-                }
-                style={
-                  item.primary
-                    ? {
-                        backgroundColor: "var(--brand)",
-                        color: "var(--brand-foreground)",
-                      }
-                    : undefined
-                }
-              >
-                {item.primary ? "+ " : ""}
-                {item.label}
-              </Link>
-            ))}
-          </nav>
-        </div>
-      </div>
-
-      <div className="container-page py-8 sm:py-10 space-y-8">
+      <div className="space-y-8">
         {/* ── KPIs ── */}
         <section>
           <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
@@ -447,6 +383,6 @@ export default async function OperatorPage({
           </Card>
         </section>
       </div>
-    </main>
+    </OperatorShell>
   );
 }

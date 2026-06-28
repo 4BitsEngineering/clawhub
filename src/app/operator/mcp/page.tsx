@@ -12,6 +12,7 @@ import { redirect } from "next/navigation";
 import { db } from "@/lib/db";
 import { requireOperator } from "@/lib/session";
 import { recordActivity } from "@/lib/activity";
+import { OperatorShell } from "@/components/operator-shell";
 import { Prisma } from "@/generated/prisma/client";
 import {
   Card,
@@ -41,7 +42,7 @@ export default async function OperatorMcpPage({
 }: {
   searchParams?: Promise<{ created?: string; updated?: string }>;
 }) {
-  await requireOperator();
+  const session = await requireOperator();
   const sp = searchParams ? await searchParams : {};
 
   const [catalog, installs] = await Promise.all([
@@ -165,21 +166,16 @@ export default async function OperatorMcpPage({
   const deprecated = catalog.filter((c) => c.deprecatedAt);
 
   return (
-    <main className="container-page min-h-screen py-8 sm:py-12 space-y-8">
-      <header className="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-4">
-        <div className="space-y-2">
-          <div className="eyebrow-chip">operator</div>
-          <h1 className="font-display text-3xl sm:text-4xl font-semibold tracking-tight">
-            Catálogo MCP
-          </h1>
-          <p className="text-sm text-muted-foreground">
-            {active.length} activos · {deprecated.length} deprecados · {installs.length}{" "}
-            instalaciones registradas (top 100).
-          </p>
-        </div>
-        <Link href="/operator" className="text-sm underline text-muted-foreground">
-          ← Volver a operator
-        </Link>
+    <OperatorShell email={session.user.email}>
+      <div className="space-y-8">
+      <header className="space-y-2">
+        <h1 className="font-display text-2xl sm:text-3xl font-semibold tracking-tight">
+          Catálogo MCP
+        </h1>
+        <p className="text-sm text-muted-foreground">
+          {active.length} activos · {deprecated.length} deprecados · {installs.length}{" "}
+          instalaciones registradas (top 100).
+        </p>
       </header>
 
       {sp.created && (
@@ -518,6 +514,7 @@ export default async function OperatorMcpPage({
           </CardContent>
         </Card>
       )}
-    </main>
+      </div>
+    </OperatorShell>
   );
 }
