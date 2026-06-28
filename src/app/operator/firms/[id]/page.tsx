@@ -121,13 +121,13 @@ export default async function OperatorFirmDetailPage({
           href="/operator"
           className="text-muted-foreground hover:text-foreground"
         >
-          ← AI-Office Center
+          ← Panel de operador
         </Link>
       </div>
 
       <header className="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-4">
         <div className="space-y-2">
-          <div className="eyebrow-chip">tenant</div>
+          <div className="eyebrow-chip">detalle de empresa</div>
           <h1 className="font-display text-3xl sm:text-4xl font-semibold tracking-tight">
             {firm.name}
           </h1>

@@ -95,20 +95,20 @@ export default async function OperatorActivityPage({
 
       <header className="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-4">
         <div className="space-y-2">
-          <div className="eyebrow-chip">operator</div>
+          <div className="eyebrow-chip">registro de actividad</div>
           <h1 className="font-display text-3xl sm:text-4xl font-semibold tracking-tight">
-            Actividad global
+            Registro de actividad
           </h1>
           <p className="text-sm text-muted-foreground">
-            Log universal de auditoría: pair, comandos, baselines, stack
-            pinning, cambios de configuración.
+            Historial de operaciones: altas de PCs, comandos remotos,
+            baselines, cambios de versión y configuración.
           </p>
         </div>
         <Link
           href="/operator"
           className="text-sm underline text-muted-foreground"
         >
-          ← Volver a operator
+          ← Panel de operador
         </Link>
       </header>
 

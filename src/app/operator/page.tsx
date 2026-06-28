@@ -4,12 +4,10 @@ import { requireOperator } from "@/lib/session";
 import { AutoRefresh } from "@/components/auto-refresh";
 import { SignOutButton } from "@/components/sign-out-button";
 import { ThemeToggle } from "@/components/theme-toggle";
+import { SearchInput } from "@/components/search-input";
 import {
   Card,
   CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
 } from "@/components/ui/card";
 import {
   Table,
@@ -24,15 +22,37 @@ import { buttonVariants } from "@/components/ui/button";
 
 export const dynamic = "force-dynamic";
 
-export default async function OperatorPage() {
+const ONLINE_THRESHOLD_MS = 3 * 60 * 1000;
+const PAGE_SIZE = 10;
+
+export default async function OperatorPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ q?: string; page?: string }>;
+}) {
   const session = await requireOperator();
-  const [firms, recentAlerts] = await Promise.all([
+  const sp = await searchParams;
+  const query = sp.q?.trim() ?? "";
+  const currentPage = Math.max(1, parseInt(sp.page ?? "1", 10) || 1);
+
+  const where = query
+    ? { name: { contains: query, mode: "insensitive" as const } }
+    : {};
+
+  const [firms, filteredCount, recentAlerts, globalFirms] = await Promise.all([
     db.firm.findMany({
+      where,
       orderBy: { createdAt: "desc" },
+      skip: (currentPage - 1) * PAGE_SIZE,
+      take: PAGE_SIZE,
       include: {
+        instances: {
+          select: { lastHeartbeatAt: true, disabledAt: true },
+        },
         _count: { select: { instances: true, users: true } },
       },
     }),
+    db.firm.count({ where }),
     db.activity.findMany({
       where: {
         kind: "instance.offline_alert",
@@ -41,209 +61,392 @@ export default async function OperatorPage() {
       orderBy: { createdAt: "desc" },
       take: 10,
     }),
+    db.firm.findMany({
+      select: {
+        seatsPurchased: true,
+        instances: { select: { lastHeartbeatAt: true, disabledAt: true } },
+        _count: { select: { instances: true } },
+      },
+    }),
   ]);
 
-  const totalInstances = firms.reduce((sum, f) => sum + f._count.instances, 0);
-  const totalSeats = firms.reduce((sum, f) => sum + f.seatsPurchased, 0);
+  const totalPages = Math.max(1, Math.ceil(filteredCount / PAGE_SIZE));
+  const totalFirms = globalFirms.length;
+  const totalInstances = globalFirms.reduce((s, f) => s + f._count.instances, 0);
+  const totalSeats = globalFirms.reduce((s, f) => s + f.seatsPurchased, 0);
+  const totalOnline = globalFirms.reduce(
+    (s, f) =>
+      s +
+      f.instances.filter(
+        (i) =>
+          i.lastHeartbeatAt &&
+          Date.now() - i.lastHeartbeatAt.getTime() < ONLINE_THRESHOLD_MS &&
+          !i.disabledAt,
+      ).length,
+    0,
+  );
+  const occupancy =
+    totalSeats > 0 ? Math.round((totalInstances / totalSeats) * 100) : 0;
+
+  const navItems = [
+    { href: "/operator/firms/new", label: "Nueva empresa", primary: true },
+    { href: "/operator/mass-actions", label: "Comandos masivos" },
+    { href: "/operator/stack", label: "Stack" },
+    { href: "/operator/mcp", label: "MCP" },
+    { href: "/operator/activity", label: "Actividad" },
+  ];
 
   return (
-    <main className="container-page min-h-screen py-8 sm:py-12 space-y-8">
+    <main className="min-h-screen">
       <AutoRefresh intervalMs={10_000} />
 
-      <header className="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-4 pb-2">
-        <div className="space-y-2">
-          <div className="eyebrow-chip">operator</div>
-          <h1 className="font-display text-3xl sm:text-4xl font-semibold tracking-tight">
-            AI-Office Center
-          </h1>
-          <p className="text-sm text-muted-foreground">
-            {session.user.email}
-          </p>
-        </div>
-        <div className="flex items-center gap-2 self-start sm:self-auto">
-          <Link
-            href="/operator/activity"
-            className={buttonVariants({ variant: "secondary" }) + " h-10 px-4"}
-          >
-            Actividad
-          </Link>
-          <Link
-            href="/operator/mass-actions"
-            className={buttonVariants({ variant: "secondary" }) + " h-10 px-4"}
-          >
-            Mass actions
-          </Link>
-          <Link
-            href="/operator/mcp"
-            className={buttonVariants({ variant: "secondary" }) + " h-10 px-4"}
-          >
-            MCP
-          </Link>
-          <Link
-            href="/operator/stack"
-            className={buttonVariants({ variant: "secondary" }) + " h-10 px-4"}
-          >
-            Stack versions
-          </Link>
-          <Link
-            href="/operator/firms/new"
-            className={buttonVariants() + " h-10 px-4"}
-            style={{
-              backgroundColor: "var(--brand)",
-              color: "var(--brand-foreground)",
-            }}
-          >
-            + Nueva firma
-          </Link>
-          <ThemeToggle />
-          <SignOutButton />
-        </div>
-      </header>
+      {/* ── Hero header con spotlight ── */}
+      <div className="relative overflow-hidden border-b border-border">
+        <div
+          aria-hidden
+          className="spotlight pointer-events-none absolute inset-x-0 top-0 h-full opacity-60"
+        />
+        <div className="container-page relative py-10 sm:py-14 space-y-6">
+          <div className="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-4">
+            <div className="space-y-2">
+              <div className="eyebrow-chip self-start">AI-Office Center</div>
+              <h1 className="font-display text-3xl sm:text-4xl font-semibold tracking-tight">
+                Panel de operador
+              </h1>
+              <p className="text-sm text-muted-foreground max-w-lg">
+                Vista global de todas las empresas, instancias y alertas de la
+                plataforma. Sesión: <span className="font-medium text-foreground">{session.user.email}</span>
+              </p>
+            </div>
+            <div className="flex items-center gap-2 self-start sm:self-auto shrink-0">
+              <ThemeToggle />
+              <SignOutButton />
+            </div>
+          </div>
 
-      {/* Stats agregadas */}
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-        <div className="card-paper p-4 space-y-1">
-          <div className="eyebrow text-[10px]">Firmas</div>
-          <div className="text-2xl font-semibold tabular-nums">
-            {firms.length}
-          </div>
-        </div>
-        <div className="card-paper p-4 space-y-1">
-          <div className="eyebrow text-[10px]">Instancias</div>
-          <div className="text-2xl font-semibold tabular-nums">
-            {totalInstances}
-          </div>
-        </div>
-        <div className="card-paper p-4 space-y-1">
-          <div className="eyebrow text-[10px]">Seats compradas</div>
-          <div className="text-2xl font-semibold tabular-nums">
-            {totalSeats}
-          </div>
-        </div>
-        <div className="card-paper p-4 space-y-1">
-          <div className="eyebrow text-[10px]">Ocupación</div>
-          <div className="text-2xl font-semibold tabular-nums">
-            {totalSeats > 0
-              ? Math.round((totalInstances / totalSeats) * 100)
-              : 0}
-            <span className="text-base text-muted-foreground">%</span>
-          </div>
+          {/* Nav pills */}
+          <nav className="flex flex-wrap items-center gap-2">
+            {navItems.map((item) => (
+              <Link
+                key={item.href}
+                href={item.href}
+                className={
+                  item.primary
+                    ? buttonVariants({ size: "sm" }) +
+                      " h-9 px-4 text-xs font-semibold shadow-sm"
+                    : buttonVariants({ variant: "secondary", size: "sm" }) +
+                      " h-9 px-4 text-xs"
+                }
+                style={
+                  item.primary
+                    ? {
+                        backgroundColor: "var(--brand)",
+                        color: "var(--brand-foreground)",
+                      }
+                    : undefined
+                }
+              >
+                {item.primary ? "+ " : ""}
+                {item.label}
+              </Link>
+            ))}
+          </nav>
         </div>
       </div>
 
-      {recentAlerts.length > 0 && (
-        <Card className="card-paper border-0 shadow-none p-0">
-          <CardHeader className="px-6 pt-6">
-            <CardTitle className="font-display text-xl flex items-center gap-2">
-              <span>⚠️</span> {recentAlerts.length} alerta
-              {recentAlerts.length === 1 ? "" : "s"} de instancias offline
-            </CardTitle>
-            <CardDescription>
-              PCs sin heartbeat &gt;24h detectados por el sweep diario.
-              Verifica si el PC sigue activo o si hay que liberar el seat.
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="px-6 pb-6">
-            <ul className="space-y-1">
-              {recentAlerts.map((a) => (
-                <li
-                  key={a.id}
-                  className="flex items-start gap-3 py-1.5 text-sm"
+      <div className="container-page py-8 sm:py-10 space-y-8">
+        {/* ── KPIs ── */}
+        <section>
+          <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
+            {[
+              { label: "Empresas", value: totalFirms },
+              {
+                label: "PCs registrados",
+                value: totalInstances,
+                sub: `/ ${totalSeats}`,
+              },
+              {
+                label: "Online ahora",
+                value: totalOnline,
+                color: "text-green-600 dark:text-green-400",
+              },
+              { label: "Ocupación", value: `${occupancy}%` },
+              {
+                label: "Alertas 24h",
+                value: recentAlerts.length,
+                color:
+                  recentAlerts.length > 0
+                    ? "text-amber-600 dark:text-amber-400"
+                    : undefined,
+              },
+            ].map((kpi) => (
+              <div
+                key={kpi.label}
+                className="card-paper p-4 sm:p-5 space-y-1.5"
+              >
+                <div className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground">
+                  {kpi.label}
+                </div>
+                <div
+                  className={`text-2xl sm:text-3xl font-semibold tabular-nums leading-none ${kpi.color ?? ""}`}
                 >
-                  <span className="mt-0.5 shrink-0">⌛</span>
-                  <div className="flex-1 min-w-0">
-                    <div>{a.summary}</div>
-                    <div className="text-xs text-muted-foreground">
-                      detectado {a.createdAt.toLocaleString("es-ES")}
-                      {a.instanceId && (
-                        <>
-                          {" · "}
+                  {kpi.value}
+                  {kpi.sub && (
+                    <span className="text-sm text-muted-foreground font-normal">
+                      {" "}
+                      {kpi.sub}
+                    </span>
+                  )}
+                </div>
+              </div>
+            ))}
+          </div>
+        </section>
+
+        {/* ── Alertas (solo si hay) ── */}
+        {recentAlerts.length > 0 && (
+          <section>
+            <Card className="card-paper border-l-4 border-l-amber-500 p-0">
+              <CardContent className="px-6 py-5">
+                <div className="flex items-center gap-2 mb-3">
+                  <span className="h-2 w-2 rounded-full bg-amber-500 animate-pulse" />
+                  <h3 className="text-sm font-semibold">
+                    {recentAlerts.length} PC
+                    {recentAlerts.length === 1 ? "" : "s"} sin conexión &gt;24 h
+                  </h3>
+                </div>
+                <ul className="space-y-2">
+                  {recentAlerts.map((a) => (
+                    <li
+                      key={a.id}
+                      className="flex items-start gap-3 text-sm"
+                    >
+                      <span className="mt-1.5 shrink-0 h-1.5 w-1.5 rounded-full bg-amber-400" />
+                      <div className="flex-1 min-w-0">
+                        <span>{a.summary}</span>
+                        <span className="text-xs text-muted-foreground ml-2">
+                          {a.createdAt.toLocaleString("es-ES")}
+                        </span>
+                        {a.instanceId && (
                           <Link
                             href={`/firm/instances/${a.instanceId}`}
-                            className="underline"
+                            className="text-xs text-brand hover:underline ml-2"
                           >
                             ver PC
                           </Link>
-                        </>
-                      )}
-                    </div>
-                  </div>
-                </li>
-              ))}
-            </ul>
-          </CardContent>
-        </Card>
-      )}
-
-      <Card className="card-paper border-0 shadow-none p-0">
-        <CardHeader className="px-6 pt-6">
-          <CardTitle className="font-display text-xl">Firmas</CardTitle>
-          <CardDescription>
-            {firms.length} {firms.length === 1 ? "tenant" : "tenants"} en
-            AI-Office Center.
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="px-2 sm:px-4 pb-4">
-          {firms.length === 0 ? (
-            <p className="text-sm text-muted-foreground px-4 py-8 text-center">
-              No hay firmas todavía. Pulsa{" "}
-              <strong>+ Nueva firma</strong> arriba para crear la primera.
-            </p>
-          ) : (
-            <div className="overflow-x-auto">
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead className="eyebrow text-[10px]">Firma</TableHead>
-                    <TableHead className="eyebrow text-[10px]">Plan</TableHead>
-                    <TableHead className="eyebrow text-[10px] text-right">
-                      Seats
-                    </TableHead>
-                    <TableHead className="eyebrow text-[10px] text-right">
-                      Instancias
-                    </TableHead>
-                    <TableHead className="eyebrow text-[10px] text-right">
-                      Usuarios
-                    </TableHead>
-                    <TableHead className="eyebrow text-[10px]">
-                      Creada
-                    </TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {firms.map((f) => (
-                    <TableRow key={f.id} className="hover:bg-paper-2/60">
-                      <TableCell className="font-medium">
-                        <Link
-                          href={`/operator/firms/${f.id}`}
-                          className="hover:text-brand transition-colors"
-                        >
-                          {f.name}
-                        </Link>
-                      </TableCell>
-                      <TableCell>
-                        <Badge variant="secondary">{f.plan}</Badge>
-                      </TableCell>
-                      <TableCell className="text-right tabular-nums">
-                        {f.seatsPurchased}
-                      </TableCell>
-                      <TableCell className="text-right tabular-nums">
-                        {f._count.instances}
-                      </TableCell>
-                      <TableCell className="text-right tabular-nums">
-                        {f._count.users}
-                      </TableCell>
-                      <TableCell className="text-muted-foreground text-sm">
-                        {f.createdAt.toLocaleDateString("es-ES")}
-                      </TableCell>
-                    </TableRow>
+                        )}
+                      </div>
+                    </li>
                   ))}
-                </TableBody>
-              </Table>
+                </ul>
+              </CardContent>
+            </Card>
+          </section>
+        )}
+
+        {/* ── Tabla de empresas ── */}
+        <section className="space-y-4">
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+            <div className="space-y-1">
+              <h2 className="font-display text-xl font-semibold tracking-tight">
+                Empresas
+              </h2>
+              {query && (
+                <p className="text-xs text-muted-foreground">
+                  {filteredCount} resultado{filteredCount !== 1 ? "s" : ""} para
+                  &ldquo;{query}&rdquo;
+                </p>
+              )}
             </div>
-          )}
-        </CardContent>
-      </Card>
+            <div className="flex items-center gap-3">
+              <SearchInput placeholder="Buscar empresa..." />
+              <Link
+                href="/operator/firms/new"
+                className={
+                  buttonVariants({ size: "sm" }) + " h-9 px-4 text-xs shrink-0"
+                }
+                style={{
+                  backgroundColor: "var(--brand)",
+                  color: "var(--brand-foreground)",
+                }}
+              >
+                + Nueva
+              </Link>
+            </div>
+          </div>
+
+          <Card className="card-paper p-0 overflow-hidden">
+            <CardContent className="p-0">
+              {firms.length === 0 ? (
+                <p className="text-sm text-muted-foreground px-6 py-12 text-center">
+                  {query
+                    ? `Sin resultados para "${query}".`
+                    : "No hay empresas. Crea la primera con + Nueva empresa."}
+                </p>
+              ) : (
+                <div className="overflow-x-auto">
+                  <Table>
+                    <TableHeader>
+                      <TableRow className="bg-muted/30 hover:bg-muted/30">
+                        <TableHead className="text-[11px] font-semibold uppercase tracking-wider pl-6">
+                          Empresa
+                        </TableHead>
+                        <TableHead className="text-[11px] font-semibold uppercase tracking-wider">
+                          Plan
+                        </TableHead>
+                        <TableHead className="text-[11px] font-semibold uppercase tracking-wider">
+                          Estado
+                        </TableHead>
+                        <TableHead className="text-[11px] font-semibold uppercase tracking-wider text-right">
+                          PCs
+                        </TableHead>
+                        <TableHead className="text-[11px] font-semibold uppercase tracking-wider text-right">
+                          Online
+                        </TableHead>
+                        <TableHead className="text-[11px] font-semibold uppercase tracking-wider text-right">
+                          Licencias
+                        </TableHead>
+                        <TableHead className="text-[11px] font-semibold uppercase tracking-wider text-right">
+                          Admins
+                        </TableHead>
+                        <TableHead className="text-[11px] font-semibold uppercase tracking-wider pr-6">
+                          Creada
+                        </TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {firms.map((f) => {
+                        const onlineCount = f.instances.filter(
+                          (i) =>
+                            i.lastHeartbeatAt &&
+                            Date.now() - i.lastHeartbeatAt.getTime() <
+                              ONLINE_THRESHOLD_MS &&
+                            !i.disabledAt,
+                        ).length;
+                        const disabledCount = f.instances.filter(
+                          (i) => i.disabledAt,
+                        ).length;
+                        const isSuspended = f.status === "suspended";
+                        return (
+                          <TableRow
+                            key={f.id}
+                            className="hover:bg-muted/20 transition-colors"
+                          >
+                            <TableCell className="font-medium pl-6">
+                              <Link
+                                href={`/operator/firms/${f.id}`}
+                                className="hover:text-brand transition-colors"
+                              >
+                                {f.name}
+                              </Link>
+                            </TableCell>
+                            <TableCell>
+                              <Badge
+                                variant="secondary"
+                                className="font-mono text-[11px]"
+                              >
+                                {f.plan}
+                              </Badge>
+                            </TableCell>
+                            <TableCell>
+                              {isSuspended ? (
+                                <Badge variant="destructive" className="text-[11px]">
+                                  Suspendida
+                                </Badge>
+                              ) : disabledCount > 0 ? (
+                                <Badge
+                                  variant="secondary"
+                                  className="text-[11px] bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-400"
+                                >
+                                  {disabledCount} bloqueada
+                                  {disabledCount > 1 ? "s" : ""}
+                                </Badge>
+                              ) : (
+                                <Badge
+                                  variant="secondary"
+                                  className="text-[11px] bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400"
+                                >
+                                  Activa
+                                </Badge>
+                              )}
+                            </TableCell>
+                            <TableCell className="text-right tabular-nums">
+                              {f._count.instances}
+                            </TableCell>
+                            <TableCell className="text-right tabular-nums">
+                              <span
+                                className={
+                                  onlineCount > 0
+                                    ? "text-green-600 dark:text-green-400 font-medium"
+                                    : "text-muted-foreground"
+                                }
+                              >
+                                {onlineCount}
+                              </span>
+                            </TableCell>
+                            <TableCell className="text-right tabular-nums">
+                              {f.seatsPurchased}
+                            </TableCell>
+                            <TableCell className="text-right tabular-nums">
+                              {f._count.users}
+                            </TableCell>
+                            <TableCell className="text-muted-foreground text-sm pr-6">
+                              {f.createdAt.toLocaleDateString("es-ES")}
+                            </TableCell>
+                          </TableRow>
+                        );
+                      })}
+                    </TableBody>
+                  </Table>
+                </div>
+              )}
+
+              {/* Paginación */}
+              {totalPages > 1 && (
+                <div className="flex items-center justify-between px-6 py-3 border-t border-border bg-muted/10">
+                  <span className="text-xs text-muted-foreground">
+                    Página {currentPage} de {totalPages}
+                    <span className="hidden sm:inline">
+                      {" "}
+                      ({filteredCount} empresa{filteredCount !== 1 ? "s" : ""})
+                    </span>
+                  </span>
+                  <div className="flex gap-1.5">
+                    {currentPage > 1 && (
+                      <Link
+                        href={`/operator?${new URLSearchParams({
+                          ...(query ? { q: query } : {}),
+                          page: String(currentPage - 1),
+                        }).toString()}`}
+                        className={
+                          buttonVariants({ variant: "outline", size: "sm" }) +
+                          " h-8 px-3 text-xs"
+                        }
+                      >
+                        Anterior
+                      </Link>
+                    )}
+                    {currentPage < totalPages && (
+                      <Link
+                        href={`/operator?${new URLSearchParams({
+                          ...(query ? { q: query } : {}),
+                          page: String(currentPage + 1),
+                        }).toString()}`}
+                        className={
+                          buttonVariants({ variant: "outline", size: "sm" }) +
+                          " h-8 px-3 text-xs"
+                        }
+                      >
+                        Siguiente
+                      </Link>
+                    )}
+                  </div>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        </section>
+      </div>
     </main>
   );
 }

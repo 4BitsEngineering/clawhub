@@ -179,20 +179,20 @@ export default async function MassActionsPage({
 
       <header className="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-4">
         <div className="space-y-2">
-          <div className="eyebrow-chip">operator</div>
+          <div className="eyebrow-chip">comandos masivos</div>
           <h1 className="font-display text-3xl sm:text-4xl font-semibold tracking-tight">
-            Acciones masivas
+            Comandos masivos
           </h1>
           <p className="text-sm text-muted-foreground">
-            Encola un comando seguro en N instancias de golpe. Cada instancia
-            lo recibirá en su próximo heartbeat.
+            Envía un comando a todos los PCs de una empresa (o de todas) de una
+            sola vez. Cada PC lo recibirá en su próxima conexión (~60 s).
           </p>
         </div>
         <Link
           href="/operator"
           className="text-sm underline text-muted-foreground"
         >
-          ← Volver a operator
+          ← Panel de operador
         </Link>
       </header>
 

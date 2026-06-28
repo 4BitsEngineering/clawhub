@@ -45,14 +45,14 @@ export default async function NewFirmPage() {
           href="/operator"
           className="text-muted-foreground hover:text-foreground"
         >
-          ← AI-Office Center
+          ← Panel de operador
         </Link>
       </div>
 
       <header className="space-y-2">
-        <div className="eyebrow-chip">crear tenant</div>
+        <div className="eyebrow-chip">nueva empresa</div>
         <h1 className="font-display text-3xl sm:text-4xl font-semibold tracking-tight">
-          Nueva firma
+          Nueva empresa
         </h1>
         <p className="text-sm text-muted-foreground">
           Crea un tenant con plan y nº de seats inicial. Después puedes editar

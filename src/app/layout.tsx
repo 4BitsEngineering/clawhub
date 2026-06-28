@@ -1,23 +1,23 @@
 import type { Metadata } from "next";
-import { Space_Grotesk, Playfair_Display } from "next/font/google";
+import { Inter, JetBrains_Mono } from "next/font/google";
 import "./globals.css";
 import { ThemeProvider } from "@/components/theme-provider";
 
-const spaceGrotesk = Space_Grotesk({
-  variable: "--font-space-grotesk",
+const inter = Inter({
+  variable: "--font-inter",
   subsets: ["latin"],
   display: "swap",
 });
 
-const playfair = Playfair_Display({
-  variable: "--font-playfair",
+const jetbrainsMono = JetBrains_Mono({
+  variable: "--font-jetbrains",
   subsets: ["latin"],
   display: "swap",
 });
 
 export const metadata: Metadata = {
-  title: "AI-Office Center · control plane",
-  description: "Control plane multi-tenant para instancias de OpenClaw Copilot.",
+  title: "AI-Office Center",
+  description: "Control plane para gestión de copilotos IA on-premises.",
 };
 
 export default function RootLayout({
@@ -29,12 +29,12 @@ export default function RootLayout({
     <html
       lang="es"
       suppressHydrationWarning
-      className={`${spaceGrotesk.variable} ${playfair.variable} h-full antialiased`}
+      className={`${inter.variable} ${jetbrainsMono.variable} h-full antialiased`}
     >
       <body className="min-h-full flex flex-col bg-background text-foreground">
         <ThemeProvider
           attribute="class"
-          defaultTheme="system"
+          defaultTheme="light"
           enableSystem
           disableTransitionOnChange
         >

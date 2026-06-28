@@ -108,17 +108,17 @@ export default async function OperatorStackPage() {
       <header className="space-y-2">
         <div className="text-sm">
           <Link href="/operator" className="text-muted-foreground hover:text-foreground">
-            ← AI-Office Center
+            ← Panel de operador
           </Link>
         </div>
-        <div className="eyebrow-chip">stack management</div>
+        <div className="eyebrow-chip">versiones de software</div>
         <h1 className="font-display text-3xl sm:text-4xl font-semibold tracking-tight">
-          Versiones del stack
+          Versiones de software
         </h1>
         <p className="text-sm text-muted-foreground">
-          Bundles disponibles + versiones canónicas pineadas por firma. Los
-          clientes desktop comparan su stack local con este manifest en cada
-          heartbeat y aplican updates según política (auto/manual).
+          Releases publicados y versiones fijadas por empresa. Los PCs
+          comparan su versión local con este listado en cada conexión y
+          aplican actualizaciones según la política configurada (automática o manual).
         </p>
       </header>
 
