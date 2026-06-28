@@ -39,7 +39,7 @@ const fs = require('node:fs');
 const path = require('node:path');
 const os = require('node:os');
 const { fetchJson } = require('../shared/http');
-const { processCommands, reconcileSuspension } = require('../shared/dispatcher');
+const { processCommands } = require('../shared/dispatcher');
 const { syncUsage } = require('../shared/usage-sync');
 
 // -------------------------------------------------------------------------
@@ -305,10 +305,10 @@ async function heartbeat(cfg) {
     error: (...a) => log('error', ...a),
   };
 
-  // Kill-switch: traduce firm_status del heartbeat a suspend/resume del
-  // bridge. Best-effort; corre aunque clawhub devuelva commands:[] (una firma
-  // suspendida no recibe comandos pero igual hay que cortar el servicio).
-  await reconcileSuspension(env, resp.body, logger);
+  // Kill-switch: NO se hace aquí. Lo enforce el command-loop del propio bridge
+  // (lee instance_status del heartbeat, con la suspensión de firma cascadeada,
+  // y arma el guard 403). La antigua reconcileSuspension pegaba a endpoints
+  // inexistentes del bridge (404) → eliminada.
 
   // Procesa comandos pendientes que el clawhub nos dispatchó en este beat.
   // No bloquea el siguiente heartbeat — si los comandos tardan más que el

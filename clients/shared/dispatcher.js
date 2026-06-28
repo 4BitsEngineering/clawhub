@@ -495,76 +495,19 @@ async function reportCommandResult(env, cmd, outcome, logger) {
 }
 
 // -------------------------------------------------------------------------
-// Kill-switch: reconciliación de suspensión por suscripción.
+// Kill-switch: NO se enforce aquí.
 //
-// El heartbeat de clawhub devuelve `firm_status` ('active' | 'suspended').
-// Traducimos ese estado a los endpoints admin del bridge (POST
-// /api/admin/suspend | /api/admin/resume) reutilizando el mismo patrón de
-// llamada que el resto de comandos admin (fetchJson + Bearer instanceToken).
+// La versión anterior (reconcileSuspension) traducía firm_status del heartbeat
+// a POST /api/admin/suspend | /api/admin/resume del bridge — endpoints que NO
+// existen (404) → no cortaba nada y daba falsa sensación de corte.
 //
-// Estado local de módulo: persiste entre heartbeats dentro del mismo proceso
-// cliente. Solo cambia tras una llamada al bridge con éxito → si el bridge
-// falla de forma transitoria, lo reintentamos en el siguiente heartbeat.
+// La enforcement real vive en el command-loop del PROPIO bridge
+// (autonomous-agents/work-console/bridge/lib/clawhub-commands.js): lee
+// `instance_status` del heartbeat (con la suspensión de firma ya cascadeada
+// por clawhub) y arma el guard 403 de server.js, cubriendo kill por instancia
+// Y por firma. No se duplica aquí: Electron está muerto y el cliente headless
+// corre alongside un bridge que ya enforce por sí mismo.
 // -------------------------------------------------------------------------
-
-let suspendedLocally = false;
-
-/**
- * Reconcilia el estado de suspensión de la firma con el bridge local.
- * Llamar una vez por heartbeat, pasándole el body de la respuesta del
- * heartbeat. Best-effort: nunca throwea (un fallo del bridge no debe romper
- * el loop de heartbeat). Defensivo si `firm_status` está ausente (clawhub
- * antiguo) → no hace nada.
- */
-async function reconcileSuspension(env, heartbeatResp, logger) {
-  const firmStatus = heartbeatResp?.firm_status;
-  // clawhub antiguo no manda firm_status → no tocar el bridge.
-  if (firmStatus !== 'suspended' && firmStatus !== 'active') return;
-  if (!env.bridgeUrl) return;
-
-  const headers = {
-    'content-type': 'application/json; charset=utf-8',
-    authorization: `Bearer ${env.instanceToken}`,
-  };
-
-  if (firmStatus === 'suspended' && !suspendedLocally) {
-    const reason = heartbeatResp.suspended_reason || 'subscription';
-    try {
-      const r = await fetchJson(
-        `${env.bridgeUrl}/api/admin/suspend`,
-        { method: 'POST', headers, body: JSON.stringify({ reason }) },
-        10_000,
-      );
-      if (!r.ok) {
-        logger?.error?.(`[dispatcher] suspend → bridge_${r.status}: ${(r.raw || '').slice(0, 200)}`);
-        return; // sin éxito → no flip; reintenta el próximo heartbeat
-      }
-      suspendedLocally = true;
-      logger?.info?.(`[dispatcher] firm suspended → bridge service cut (reason: ${reason})`);
-    } catch (err) {
-      logger?.error?.(`[dispatcher] suspend failed: ${err.message}`);
-    }
-    return;
-  }
-
-  if (firmStatus === 'active' && suspendedLocally) {
-    try {
-      const r = await fetchJson(
-        `${env.bridgeUrl}/api/admin/resume`,
-        { method: 'POST', headers, body: JSON.stringify({}) },
-        10_000,
-      );
-      if (!r.ok) {
-        logger?.error?.(`[dispatcher] resume → bridge_${r.status}: ${(r.raw || '').slice(0, 200)}`);
-        return; // sin éxito → seguimos marcados como suspendidos; reintenta
-      }
-      suspendedLocally = false;
-      logger?.info?.('[dispatcher] firm active → bridge service resumed');
-    } catch (err) {
-      logger?.error?.(`[dispatcher] resume failed: ${err.message}`);
-    }
-  }
-}
 
 /**
  * Procesa una tanda de comandos en serie. No bloquea ni espera entre ellos
@@ -587,4 +530,4 @@ async function processCommands(env, commands, logger) {
   }
 }
 
-module.exports = { executeCommand, reportCommandResult, processCommands, reconcileSuspension };
+module.exports = { executeCommand, reportCommandResult, processCommands };
