@@ -212,10 +212,13 @@ const CATALOG: CatalogEntry[] = [
 ];
 
 async function main() {
+  // Mismo schema dedicado que src/lib/db.ts: sin él, el adapter apunta a
+  // `public` y las tablas de clawhub no existen ahí.
   const db = new PrismaClient({
-    adapter: new PrismaPg({
-      connectionString: process.env.DIRECT_URL ?? process.env.DATABASE_URL!,
-    }),
+    adapter: new PrismaPg(
+      { connectionString: process.env.DIRECT_URL ?? process.env.DATABASE_URL! },
+      { schema: "clawhub" },
+    ),
   });
   try {
     let created = 0;

@@ -57,30 +57,25 @@ interface Manifest {
   [k: string]: unknown;
 }
 
-// slug de ai-office → agentKey (= manifest.id) de clawcrew.
-const SLUG_TO_KEY: Record<string, string> = {
-  elena: "executive",
-  diego: "outbound-sdr",
-  sofia: "community",
-  mateo: "seo-writer",
-  lucia: "legal-light",
-};
-
-// Plantillas por sector — fuente: ai-office/web/src/lib/office-templates.ts.
+// Plantillas por sector con agentKeys REALES del catálogo Lean PyME (12 roles).
+// Equipos alineados con SECTOR_TEMPLATES de openclaw-configurator
+// (lib/wizard-context.tsx) para que managed y wizard propongan lo mismo.
+// Los antiguos slugs de persona (elena/diego/…) y sus agentKeys muertos
+// (outbound-sdr/seo-writer/legal-light) desaparecieron con el catálogo Lean.
 const TEMPLATES: {
   sector: string;
   name: string;
   emoji: string;
   description: string;
-  slugs: string[];
+  agentKeys: string[];
   recommended?: boolean;
 }[] = [
-  { sector: "asesoria", name: "Asesoría o despacho", emoji: "📊", description: "Gestoría, abogados, consultoría", slugs: ["elena", "mateo", "lucia"] },
-  { sector: "ecommerce", name: "E-commerce o tienda", emoji: "🛍️", description: "Venta online, retail, marca de producto", slugs: ["elena", "sofia", "mateo"] },
-  { sector: "agencia", name: "Agencia o servicios B2B", emoji: "🚀", description: "Marketing, software, consultoría a empresas", slugs: ["elena", "diego", "sofia", "mateo"] },
-  { sector: "clinica", name: "Clínica o salud", emoji: "🩺", description: "Dental, fisio, estética, bienestar", slugs: ["elena", "sofia", "mateo"] },
-  { sector: "inmobiliaria", name: "Inmobiliaria", emoji: "🏠", description: "Compraventa y alquiler de inmuebles", slugs: ["elena", "diego", "sofia", "lucia"] },
-  { sector: "general", name: "Otra cosa / aún no lo sé", emoji: "✨", description: "Empieza con el equipo completo", slugs: ["elena", "diego", "sofia", "mateo", "lucia"], recommended: true },
+  { sector: "asesoria", name: "Asesoría o despacho", emoji: "📊", description: "Gestoría, abogados, consultoría", agentKeys: ["executive", "copywriter", "legal-suite"] },
+  { sector: "ecommerce", name: "E-commerce o tienda", emoji: "🛍️", description: "Venta online, retail, marca de producto", agentKeys: ["executive", "community", "marketing-strategist", "copywriter"] },
+  { sector: "agencia", name: "Agencia o servicios B2B", emoji: "🚀", description: "Marketing, software, consultoría a empresas", agentKeys: ["executive", "marketing-strategist", "community", "copywriter"] },
+  { sector: "clinica", name: "Clínica o salud", emoji: "🩺", description: "Dental, fisio, estética, bienestar", agentKeys: ["executive", "community", "copywriter"] },
+  { sector: "inmobiliaria", name: "Inmobiliaria", emoji: "🏠", description: "Compraventa y alquiler de inmuebles", agentKeys: ["executive", "community", "legal-suite"] },
+  { sector: "general", name: "Otra cosa / aún no lo sé", emoji: "✨", description: "Empieza con el equipo completo", agentKeys: ["executive", "community", "copywriter", "legal-suite"], recommended: true },
 ];
 
 function clawcrewCommit(): string | null {
@@ -130,8 +125,13 @@ async function main() {
   const manifests = readManifests();
   console.log(`   ${manifests.length} manifiestos encontrados`);
 
+  // Mismo schema dedicado que src/lib/db.ts: sin él, el adapter apunta a
+  // `public` y las tablas de clawhub no existen ahí.
   const db = new PrismaClient({
-    adapter: new PrismaPg({ connectionString: process.env.DIRECT_URL ?? process.env.DATABASE_URL! }),
+    adapter: new PrismaPg(
+      { connectionString: process.env.DIRECT_URL ?? process.env.DATABASE_URL! },
+      { schema: "clawhub" },
+    ),
   });
 
   try {
@@ -174,16 +174,31 @@ async function main() {
     }
     console.log(`✅ catálogo: ${created} nuevos, ${updated} actualizados, ${withPortrait}/${manifests.length} con retrato`);
 
-    // --- Plantillas por sector ---
     const knownKeys = new Set(manifests.map((m) => m.agentKey));
+
+    // --- Deprecación de roles que ya no existen en clawcrew (soft-hide) ---
+    const stale = await db.agentCatalogEntry.findMany({
+      where: { libraryId: LIBRARY_ID, agentKey: { notIn: [...knownKeys] }, deprecatedAt: null },
+      select: { id: true, agentKey: true },
+    });
+    for (const s of stale) {
+      await db.agentCatalogEntry.update({ where: { id: s.id }, data: { deprecatedAt: new Date() } });
+      console.log(`   ⊘ ${s.agentKey}: ya no está en clawcrew → deprecado`);
+    }
+    // Re-activa roles que vuelvan a la librería tras una deprecación.
+    await db.agentCatalogEntry.updateMany({
+      where: { libraryId: LIBRARY_ID, agentKey: { in: [...knownKeys] }, deprecatedAt: { not: null } },
+      data: { deprecatedAt: null },
+    });
+
+    // --- Plantillas por sector ---
     let tCreated = 0;
     let tUpdated = 0;
     for (let i = 0; i < TEMPLATES.length; i++) {
       const t = TEMPLATES[i];
-      const agentKeys = t.slugs.map((s) => {
-        const key = SLUG_TO_KEY[s];
-        if (!key) throw new Error(`Plantilla ${t.sector}: slug "${s}" sin mapeo en SLUG_TO_KEY`);
-        if (!knownKeys.has(key)) console.warn(`  ⚠ plantilla ${t.sector} referencia agentKey "${key}" que no está en el catálogo`);
+      const agentKeys = t.agentKeys.map((key) => {
+        // Plantilla rota = error duro: nunca sembrar agentKeys que la librería no tiene.
+        if (!knownKeys.has(key)) throw new Error(`Plantilla ${t.sector}: agentKey "${key}" no existe en clawcrew`);
         return key;
       });
       const data = {
