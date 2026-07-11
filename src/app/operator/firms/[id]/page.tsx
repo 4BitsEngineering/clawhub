@@ -3,6 +3,7 @@ import { notFound } from "next/navigation";
 import { revalidatePath } from "next/cache";
 import { db } from "@/lib/db";
 import { generatePairingCode } from "@/lib/tokens";
+import { firmHasPromotedBaseline } from "@/lib/promoted-baseline";
 import { requireOperator } from "@/lib/session";
 import { recordActivity } from "@/lib/activity";
 import { AutoRefresh } from "@/components/auto-refresh";
@@ -55,6 +56,14 @@ export default async function OperatorFirmDetailPage({
   async function generatePairingTokenAction() {
     "use server";
     await requireOperator(); // server action ≠ render: reautenticar aquí
+    // Sin baseline promovido el código está condenado: /api/v0/pair pareará
+    // pero el instalador abortará al provisionar. El botón ya viene disabled,
+    // pero una server action es un POST independiente — re-validar aquí.
+    if (!(await firmHasPromotedBaseline(id))) {
+      throw new Error(
+        "no_installable: esta firma no tiene baseline promovido — regístrala desde el configurator antes de generar códigos.",
+      );
+    }
     await db.pairingToken.create({
       data: {
         firmId: id,
@@ -138,6 +147,11 @@ export default async function OperatorFirmDetailPage({
 
   const firmSuspended = firm.status !== "active";
 
+  // Instalabilidad: sin baseline promovido, cualquier first-pair acabará en
+  // fallo de provisión en casa del cliente (caso real 11-jul). Banner + botón
+  // deshabilitado; la server action re-valida.
+  const hasPromotedBaseline = await firmHasPromotedBaseline(id);
+
   const onlineCount = firm.instances.filter(
     (i) =>
       i.lastHeartbeatAt &&
@@ -171,6 +185,14 @@ export default async function OperatorFirmDetailPage({
             </Button>
           </form>
         </div>
+
+      {!hasPromotedBaseline && (
+        <div className="p-3 rounded-md border border-amber-400/60 bg-amber-50 dark:bg-amber-950/30 text-sm text-amber-900 dark:text-amber-200">
+          Esta firma no tiene paquete instalable (baseline promovido): el
+          instalador fallará al provisionar. Regístrala desde el configurator
+          antes de generar códigos de instalación.
+        </div>
+      )}
 
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
         <Card>
@@ -224,7 +246,17 @@ export default async function OperatorFirmDetailPage({
             </CardDescription>
           </div>
           <form action={generatePairingTokenAction}>
-            <Button type="submit">+ Generar pairing code</Button>
+            <Button
+              type="submit"
+              disabled={!hasPromotedBaseline}
+              title={
+                hasPromotedBaseline
+                  ? undefined
+                  : "Sin baseline promovido el instalador fallará — registra la firma desde el configurator primero"
+              }
+            >
+              + Generar pairing code
+            </Button>
           </form>
         </CardHeader>
         <CardContent>

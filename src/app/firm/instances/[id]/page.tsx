@@ -999,6 +999,16 @@ export default async function InstanceDetailPage({
           </CardDescription>
         </CardHeader>
         <CardContent className="px-6 pb-6 space-y-3">
+          {/* Aviso (sin bloquear): un re-pair sin baseline promovido pareará
+              pero el instalador abortará al descargar el paquete. */}
+          {!firmBaselines.some((b) => b.isPromoted) && (
+            <div className="p-3 rounded-md border border-amber-400/60 bg-amber-50 dark:bg-amber-950/30 text-xs text-amber-900 dark:text-amber-200">
+              Tu firma no tiene paquete instalable (baseline promovido): el
+              re-pair generará código, pero una reinstalación completa fallará
+              al provisionar. Promociona un baseline o registra desde el
+              configurator.
+            </div>
+          )}
           {activeRepairToken ? (
             <div
               className="card-quiet px-4 py-3 flex items-center gap-3"

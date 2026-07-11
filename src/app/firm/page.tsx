@@ -3,6 +3,7 @@ import { revalidatePath } from "next/cache";
 import { db } from "@/lib/db";
 import { generatePairingCode } from "@/lib/tokens";
 import { requireFirmAdmin } from "@/lib/session";
+import { firmHasPromotedBaseline } from "@/lib/promoted-baseline";
 
 export const dynamic = "force-dynamic";
 
@@ -46,6 +47,14 @@ export default async function FirmPage() {
     if (seatsUsed >= fresh.seatsPurchased) {
       throw new Error(
         `quota_full: ${seatsUsed}/${fresh.seatsPurchased} PCs. Contacta con soporte para ampliar tu plan.`,
+      );
+    }
+    // Sin baseline promovido el instalador abortará al provisionar — no
+    // repartir códigos condenados (el botón viene disabled; una server
+    // action es un POST independiente, re-validar aquí).
+    if (!(await firmHasPromotedBaseline(firmId))) {
+      throw new Error(
+        "no_installable: tu firma no tiene paquete instalable (baseline promovido). Completa el registro desde el configurator o contacta con soporte.",
       );
     }
     const code = generatePairingCode();
@@ -134,7 +143,7 @@ export default async function FirmPage() {
     revalidatePath("/firm");
   }
 
-  const [firm, latestInstaller, recentActivity] = await Promise.all([
+  const [firm, latestInstaller, recentActivity, hasPromotedBaseline] = await Promise.all([
     db.firm.findUnique({
       where: { id: firmId },
       include: {
@@ -164,6 +173,7 @@ export default async function FirmPage() {
       orderBy: { createdAt: "desc" },
       take: 30,
     }),
+    firmHasPromotedBaseline(firmId),
   ]);
 
   if (!firm) {
@@ -248,14 +258,16 @@ export default async function FirmPage() {
             <Button
               type="submit"
               className="h-10 px-4"
-              disabled={quotaFull}
+              disabled={quotaFull || !hasPromotedBaseline}
               title={
                 quotaFull
                   ? "Cupo lleno: amplía el plan o desempareja un PC en desuso primero"
-                  : undefined
+                  : !hasPromotedBaseline
+                    ? "Tu firma no tiene paquete instalable (baseline promovido) — completa el registro desde el configurator"
+                    : undefined
               }
               style={
-                quotaFull
+                quotaFull || !hasPromotedBaseline
                   ? undefined
                   : {
                       backgroundColor: "var(--brand)",
@@ -270,6 +282,14 @@ export default async function FirmPage() {
           <SignOutButton />
         </div>
       </header>
+
+      {!hasPromotedBaseline && (
+        <div className="p-3 rounded-md border border-amber-400/60 bg-amber-50 dark:bg-amber-950/30 text-sm text-amber-900 dark:text-amber-200">
+          Tu firma aún no tiene paquete instalable (baseline promovido): el
+          instalador fallará al provisionar un PC nuevo. Completa el registro
+          desde el configurator o contacta con soporte.
+        </div>
+      )}
 
       {/* Tokens de alta nueva (NO los de re-pair: esos viven en la columna
           "Acciones" de la tabla de instancias). Filtrar por
