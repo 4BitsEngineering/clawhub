@@ -1,6 +1,8 @@
-import { notFound } from "next/navigation";
+import { notFound, redirect } from "next/navigation";
 import { after } from "next/server";
+import { cookies } from "next/headers";
 import { db } from "@/lib/db";
+import { stripe, ANNUAL_LICENSE_NAME, ANNUAL_LICENSE_DESC } from "@/lib/stripe";
 import { CountdownTimer } from "@/components/countdown-timer";
 
 export const dynamic = "force-dynamic";
@@ -14,6 +16,57 @@ export default async function LandingPublicPage({
 
   const landing = await db.landingPage.findUnique({ where: { slug } });
   if (!landing || !landing.isActive) notFound();
+
+  const stripeEnabled = !!stripe;
+  const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000";
+
+  async function checkoutAction() {
+    "use server";
+    if (!stripe) return;
+
+    const cookieStore = await cookies();
+    const attribution = cookieStore.get("clawhub-attribution")?.value ?? null;
+
+    // Pre-fill email from attribution if available
+    let customerEmail: string | undefined;
+    if (attribution) {
+      const send = await db.campaignSend.findUnique({
+        where: { trackingToken: attribution },
+        include: { prospect: { select: { email: true } } },
+      });
+      customerEmail = send?.prospect.email;
+    }
+
+    const lp = await db.landingPage.findUnique({ where: { slug } });
+    if (!lp) return;
+
+    const session = await stripe.checkout.sessions.create({
+      mode: "payment",
+      payment_method_types: ["card"],
+      line_items: [
+        {
+          price_data: {
+            currency: lp.currency.toLowerCase(),
+            product_data: {
+              name: ANNUAL_LICENSE_NAME,
+              description: ANNUAL_LICENSE_DESC,
+            },
+            unit_amount: lp.discountPriceCents,
+          },
+          quantity: 1,
+        },
+      ],
+      metadata: {
+        trackingToken: attribution ?? "",
+        landingSlug: slug,
+      },
+      ...(customerEmail ? { customer_email: customerEmail } : {}),
+      success_url: `${appUrl}/oferta/${slug}/success?session_id={CHECKOUT_SESSION_ID}`,
+      cancel_url: `${appUrl}/oferta/${slug}`,
+    });
+
+    if (session.url) redirect(session.url);
+  }
 
   // Registrar visita orgánica (sin bloquear el render)
   after(async () => {
@@ -98,13 +151,25 @@ export default async function LandingPublicPage({
             />
           )}
 
-          <button
-            disabled
-            className="w-full sm:w-auto px-12 py-4 rounded-xl font-semibold text-white text-lg opacity-50 cursor-not-allowed select-none"
-            style={{ backgroundColor: "var(--brand)" }}
-          >
-            Contratar ahora — próximamente
-          </button>
+          {stripeEnabled ? (
+            <form action={checkoutAction}>
+              <button
+                type="submit"
+                className="w-full sm:w-auto px-12 py-4 rounded-xl font-semibold text-white text-lg transition-opacity hover:opacity-90 active:opacity-75"
+                style={{ backgroundColor: "var(--brand)" }}
+              >
+                Contratar ahora →
+              </button>
+            </form>
+          ) : (
+            <button
+              disabled
+              className="w-full sm:w-auto px-12 py-4 rounded-xl font-semibold text-white text-lg opacity-50 cursor-not-allowed select-none"
+              style={{ backgroundColor: "var(--brand)" }}
+            >
+              Contratar ahora — próximamente
+            </button>
+          )}
 
           <p className="text-xs text-muted-foreground">
             Pago seguro con Stripe · Activación inmediata · Sin permanencia

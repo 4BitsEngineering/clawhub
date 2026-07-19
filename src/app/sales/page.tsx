@@ -99,10 +99,22 @@ export default async function SalesPage() {
     revalidatePath("/sales");
   }
 
-  const salesRep = await db.salesRep.findUnique({
-    where: { userId: session.user.id },
-    include: { prospects: { orderBy: { createdAt: "desc" } } },
-  });
+  const [salesRep, commissionSummary] = await Promise.all([
+    db.salesRep.findUnique({
+      where: { userId: session.user.id },
+      include: { prospects: { orderBy: { createdAt: "desc" } } },
+    }),
+    db.salesRep
+      .findUnique({ where: { userId: session.user.id }, select: { id: true } })
+      .then((rep) =>
+        rep
+          ? db.commission.aggregate({
+              where: { salesRepId: rep.id, status: "PENDING" },
+              _sum: { amountCents: true },
+            })
+          : null,
+      ),
+  ]);
 
   if (!salesRep) {
     return (
@@ -136,7 +148,7 @@ export default async function SalesPage() {
         </div>
 
         {/* KPIs */}
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-4">
           {[
             { label: "Total prospects", value: salesRep.prospects.length },
             { label: "Nuevos", value: byStatus["NEW"] ?? 0 },
@@ -149,7 +161,20 @@ export default async function SalesPage() {
             {
               label: "Compraron",
               value: byStatus["PURCHASED"] ?? 0,
-              color: "text-green-600 dark:text-green-400",
+              color:
+                (byStatus["PURCHASED"] ?? 0) > 0
+                  ? "text-green-600 dark:text-green-400"
+                  : undefined,
+            },
+            {
+              label: "Comisión pendiente",
+              value: (
+                (commissionSummary?._sum?.amountCents ?? 0) / 100
+              ).toLocaleString("es-ES", { style: "currency", currency: "EUR" }),
+              color:
+                (commissionSummary?._sum?.amountCents ?? 0) > 0
+                  ? "text-amber-600 dark:text-amber-400"
+                  : undefined,
             },
           ].map((kpi) => (
             <div key={kpi.label} className="card-paper p-5 space-y-1.5">

@@ -48,6 +48,12 @@ export function EmpresaShell({
               >
                 Landing
               </Link>
+              <Link
+                href="/empresa/commissions"
+                className="px-3 py-1 text-xs text-violet-200/80 hover:text-white hover:bg-white/10 rounded transition-colors"
+              >
+                Comisiones
+              </Link>
             </nav>
           </div>
           <div className="flex items-center gap-2">
