@@ -29,6 +29,7 @@ model User {
 
   accounts Account[]
   sessions Session[]
+  salesRep  SalesRep?
 
   @@index([firmId])
 }
@@ -71,6 +72,8 @@ model VerificationToken {
 
 enum UserRole {
   OPERATOR
+  EMPRESA    // equipo interno: gestiona comerciales y sus propios prospects
+  COMERCIAL  // comercial externo a comisión
   FIRM_ADMIN
 }
 
@@ -748,4 +751,256 @@ model PairAttempt {
   createdAt DateTime @default(now())
 
   @@index([ipHash, createdAt])
+}
+
+// ============================================
+// Sales Suite
+// ============================================
+
+/**
+ * SalesRep — un comercial externo a comisión.
+ * Siempre ligado a un User con role=COMERCIAL (1:1).
+ * La empresa configura su tasa de comisión (default 35%).
+ */
+model SalesRep {
+  id             String        @id @default(uuid())
+  userId         String        @unique
+  user           User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  territory      String?       // zona asignada: "Valencia", "Madrid", etc.
+  commissionRate Float         @default(0.35)
+  status         SalesRepStatus @default(ACTIVE)
+  createdAt      DateTime      @default(now())
+
+  prospects   Prospect[]
+  commissions Commission[]
+
+  @@index([status])
+}
+
+enum SalesRepStatus {
+  ACTIVE
+  INACTIVE
+  SUSPENDED
+}
+
+/**
+ * Prospect — empresa potencial que un comercial (o la empresa) quiere convertir.
+ * salesRepId=null → prospect propio de la empresa (rol EMPRESA).
+ * convertedFirmId se rellena cuando el prospect compra y se crea la Firm.
+ */
+model Prospect {
+  id              String        @id @default(uuid())
+  salesRepId      String?
+  salesRep        SalesRep?     @relation(fields: [salesRepId], references: [id], onDelete: SetNull)
+  createdById     String        // User.id del creador (no FK para no acoplar)
+  cif             String?
+  name            String
+  phone           String?
+  email           String
+  contactName     String?
+  status          ProspectStatus @default(NEW)
+  notes           String?
+  convertedFirmId String?       // Firm.id al comprar (sin FK para no acoplar)
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+
+  sends     CampaignSend[]
+  purchases Purchase[]
+
+  @@index([salesRepId])
+  @@index([createdById])
+  @@index([status])
+  @@index([email])
+}
+
+enum ProspectStatus {
+  NEW
+  CONTACTED
+  CAMPAIGN_SENT
+  VISITED_LANDING
+  PURCHASED
+  LOST
+}
+
+/**
+ * LandingPage — la landing pública de venta de AI-Office.
+ * Por ahora una sola activa; estructura preparada para personalización futura.
+ */
+model LandingPage {
+  id                  String    @id @default(uuid())
+  slug                String    @unique
+  headline            String    @default("Transforma tu empresa con AI-Office")
+  videoUrl            String    @default("")
+  bodyHtml            String    @default("")
+  originalPriceCents  Int       @default(20000)  // en céntimos: 200,00 €
+  discountPriceCents  Int       @default(14900)  // 149,00 €
+  currency            String    @default("EUR")
+  discountEndsAt      DateTime?
+  stripeProductId     String?
+  stripeAnnualPriceId String?
+  isActive            Boolean   @default(true)
+  createdAt           DateTime  @default(now())
+  updatedAt           DateTime  @updatedAt
+
+  campaigns Campaign[]
+  visits    LandingVisit[]
+}
+
+/**
+ * Campaign — una campaña publicitaria enviada por email y/o SMS.
+ * Cada envío individual (prospect × canal) genera un CampaignSend con su
+ * propio trackingToken para atribución exacta de la venta.
+ */
+model Campaign {
+  id          String         @id @default(uuid())
+  name        String
+  subject     String
+  bodyEmail   String
+  bodySms     String?
+  landingId   String
+  landing     LandingPage    @relation(fields: [landingId], references: [id], onDelete: Restrict)
+  createdById String         // User.id del creador
+  status      CampaignStatus @default(DRAFT)
+  scheduledAt DateTime?
+  sentAt      DateTime?
+  createdAt   DateTime       @default(now())
+  updatedAt   DateTime       @updatedAt
+
+  sends CampaignSend[]
+
+  @@index([createdById, status])
+  @@index([status])
+}
+
+enum CampaignStatus {
+  DRAFT
+  SCHEDULED
+  SENT
+  CANCELLED
+}
+
+/**
+ * CampaignSend — un envío individual: un prospect, un canal, un token único.
+ * trackingToken es el puente de atribución que viaja en la URL de la landing,
+ * se guarda en cookie (30 días) y se adjunta al Stripe Checkout como metadata.
+ */
+model CampaignSend {
+  id             String     @id @default(uuid())
+  campaignId     String
+  campaign       Campaign   @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+  prospectId     String
+  prospect       Prospect   @relation(fields: [prospectId], references: [id], onDelete: Cascade)
+  channel        Channel
+  status         SendStatus @default(PENDING)
+  trackingToken  String     @unique @default(uuid())
+  externalId     String?    // Resend message ID / Twilio SID
+  sentAt         DateTime?
+  openedAt       DateTime?
+  clickedAt      DateTime?
+  createdAt      DateTime   @default(now())
+
+  landingVisits LandingVisit[]
+
+  @@index([campaignId])
+  @@index([prospectId])
+}
+
+enum Channel {
+  EMAIL
+  SMS
+}
+
+enum SendStatus {
+  PENDING
+  SENT
+  FAILED
+  BOUNCED
+}
+
+/**
+ * LandingVisit — cada visita a la landing pública.
+ * trackingToken puede ser null (visita orgánica sin enlace de campaña).
+ * Cuando el prospect compra, se marca convertedAt en este registro.
+ */
+model LandingVisit {
+  id             String      @id @default(uuid())
+  landingId      String
+  landing        LandingPage @relation(fields: [landingId], references: [id], onDelete: Restrict)
+  sendId         String?
+  send           CampaignSend? @relation(fields: [sendId], references: [id], onDelete: SetNull)
+  trackingToken  String?
+  ipHash         String?
+  convertedAt    DateTime?
+  createdAt      DateTime    @default(now())
+
+  @@index([landingId, createdAt])
+  @@index([trackingToken])
+}
+
+/**
+ * Purchase — registro de una compra vía Stripe.
+ * prospectId/trackingToken pueden ser null para compras orgánicas (sin campaña).
+ * firmId se rellena cuando el webhook crea la Firm en clawhub.
+ * buyerEmail/buyerName se snapshotean del checkout para auditoría.
+ */
+model Purchase {
+  id                  String        @id @default(uuid())
+  prospectId          String?
+  prospect            Prospect?     @relation(fields: [prospectId], references: [id], onDelete: SetNull)
+  trackingToken       String?
+  stripeSessionId     String        @unique
+  stripePaymentIntent String?
+  productType         ProductType   @default(ANNUAL_LICENSE)
+  amountCents         Int
+  currency            String        @default("EUR")
+  status              PurchaseStatus @default(PENDING)
+  firmId              String?       // Firm.id creada al completar (sin FK)
+  buyerEmail          String?
+  buyerName           String?
+  completedAt         DateTime?
+  createdAt           DateTime      @default(now())
+
+  commission Commission?
+
+  @@index([prospectId])
+  @@index([trackingToken])
+  @@index([status, createdAt])
+}
+
+enum ProductType {
+  ANNUAL_LICENSE
+}
+
+enum PurchaseStatus {
+  PENDING
+  COMPLETED
+  FAILED
+  REFUNDED
+}
+
+/**
+ * Commission — comisión generada por una venta.
+ * 1:1 con Purchase (solo una comisión por compra).
+ * rate es la tasa efectiva usada (snapshot, por si cambia después).
+ * amountCents = rate × Purchase.amountCents.
+ */
+model Commission {
+  id          String           @id @default(uuid())
+  purchaseId  String           @unique
+  purchase    Purchase         @relation(fields: [purchaseId], references: [id], onDelete: Restrict)
+  salesRepId  String
+  salesRep    SalesRep         @relation(fields: [salesRepId], references: [id], onDelete: Restrict)
+  rate        Float
+  amountCents Int
+  status      CommissionStatus @default(PENDING)
+  paidAt      DateTime?
+  notes       String?
+  createdAt   DateTime         @default(now())
+
+  @@index([salesRepId, status])
+}
+
+enum CommissionStatus {
+  PENDING
+  PAID
 }

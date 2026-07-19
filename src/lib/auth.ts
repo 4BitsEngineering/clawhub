@@ -10,7 +10,7 @@ declare module "next-auth" {
       email: string;
       name?: string | null;
       image?: string | null;
-      role: "OPERATOR" | "FIRM_ADMIN";
+      role: "OPERATOR" | "FIRM_ADMIN" | "EMPRESA" | "COMERCIAL";
       firmId?: string | null;
     };
   }

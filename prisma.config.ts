@@ -5,7 +5,10 @@
 // mode breaks DDL. App runtime uses the pooled DATABASE_URL via the
 // adapter-pg in src/lib/db.ts.
 
-import "dotenv/config";
+import { config } from "dotenv";
+// Next.js usa .env.local para overrides locales; Prisma CLI no lo carga solo.
+config({ path: ".env.local", override: true });
+config(); // fallback a .env si existe
 import { defineConfig } from "prisma/config";
 
 export default defineConfig({

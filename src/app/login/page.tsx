@@ -27,25 +27,58 @@ async function loginAction(formData: FormData) {
 async function devLoginAction(formData: FormData) {
   "use server";
   if (process.env.DEV_AUTH_ENABLED !== "true") return;
-  const role = formData.get("role") as string;
-  const targetRole = role === "OPERATOR" ? "OPERATOR" : "FIRM_ADMIN";
+  const raw = (formData.get("role") as string | null) ?? "";
+  const targetRole =
+    raw === "FIRM_ADMIN" ? ("FIRM_ADMIN" as const) :
+    raw === "EMPRESA"    ? ("EMPRESA" as const) :
+    raw === "COMERCIAL"  ? ("COMERCIAL" as const) :
+                           ("OPERATOR" as const);
+
   let user = await db.user.findFirst({
     where: { role: targetRole },
     orderBy: { createdAt: "asc" },
   });
-  // Fase de validación: si no hay ningún usuario de ese rol, auto-provisiona uno
-  // DEV con email SINTÉTICO (no una identidad real). Solo con DEV_AUTH_ENABLED.
-  // Cuando montemos login real, esto se quita y se crean usuarios de verdad.
-  if (!user && targetRole === "OPERATOR") {
-    user = await db.user.create({
-      data: {
-        email: "dev-operator@clawhub.local",
-        name: "Dev Operator",
-        role: "OPERATOR",
-        emailVerified: new Date(),
-      },
+
+  if (!user) {
+    if (targetRole === "OPERATOR") {
+      user = await db.user.create({
+        data: {
+          email: "dev-operator@clawhub.local",
+          name: "Dev Operator",
+          role: "OPERATOR",
+          emailVerified: new Date(),
+        },
+      });
+    } else if (targetRole === "EMPRESA") {
+      user = await db.user.create({
+        data: {
+          email: "dev-empresa@clawhub.local",
+          name: "Dev Empresa",
+          role: "EMPRESA",
+          emailVerified: new Date(),
+        },
+      });
+    } else if (targetRole === "COMERCIAL") {
+      user = await db.user.create({
+        data: {
+          email: "dev-comercial@clawhub.local",
+          name: "Dev Comercial",
+          role: "COMERCIAL",
+          emailVerified: new Date(),
+          salesRep: { create: {} },
+        },
+      });
+    }
+  }
+
+  if (user && targetRole === "COMERCIAL") {
+    await db.salesRep.upsert({
+      where: { userId: user.id },
+      update: {},
+      create: { userId: user.id },
     });
   }
+
   if (!user) return;
   const c = await cookies();
   c.set(DEV_COOKIE, user.id, {
@@ -95,12 +128,27 @@ export default async function LoginPage({
                 <Button
                   type="submit"
                   className="w-full"
-                  style={{
-                    backgroundColor: "var(--brand)",
-                    color: "var(--brand-foreground)",
-                  }}
+                  style={{ backgroundColor: "var(--brand)", color: "var(--brand-foreground)" }}
                 >
-                  Entrar al panel (Admin) →
+                  Entrar como Operator (Admin) →
+                </Button>
+              </form>
+              <form action={devLoginAction}>
+                <input type="hidden" name="role" value="EMPRESA" />
+                <Button type="submit" variant="secondary" className="w-full">
+                  Entrar como Empresa →
+                </Button>
+              </form>
+              <form action={devLoginAction}>
+                <input type="hidden" name="role" value="COMERCIAL" />
+                <Button type="submit" variant="outline" className="w-full">
+                  Entrar como Comercial →
+                </Button>
+              </form>
+              <form action={devLoginAction}>
+                <input type="hidden" name="role" value="FIRM_ADMIN" />
+                <Button type="submit" variant="ghost" className="w-full">
+                  Entrar como Firm Admin →
                 </Button>
               </form>
               <p className="text-xs text-muted-foreground">

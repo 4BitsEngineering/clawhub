@@ -21,7 +21,7 @@ export type SessionUser = {
   id: string;
   email: string;
   name?: string | null;
-  role: "OPERATOR" | "FIRM_ADMIN";
+  role: "OPERATOR" | "FIRM_ADMIN" | "EMPRESA" | "COMERCIAL";
   firmId?: string | null;
 };
 
@@ -51,10 +51,17 @@ export async function getSession(): Promise<Session | null> {
   return real as Session;
 }
 
+function homeForRole(role: SessionUser["role"]): string {
+  if (role === "OPERATOR") return "/operator";
+  if (role === "EMPRESA") return "/empresa";
+  if (role === "COMERCIAL") return "/sales";
+  return "/firm";
+}
+
 export async function requireOperator(): Promise<Session> {
   const s = await getSession();
   if (!s) redirect("/login");
-  if (s.user.role !== "OPERATOR") redirect("/firm");
+  if (s.user.role !== "OPERATOR") redirect(homeForRole(s.user.role));
   return s;
 }
 
@@ -63,7 +70,23 @@ export async function requireFirmAdmin(): Promise<
 > {
   const s = await getSession();
   if (!s) redirect("/login");
-  if (s.user.role !== "FIRM_ADMIN") redirect("/operator");
+  if (s.user.role !== "FIRM_ADMIN") redirect(homeForRole(s.user.role));
   if (!s.user.firmId) redirect("/login");
   return s as Session & { user: SessionUser & { firmId: string } };
+}
+
+export async function requireEmpresa(): Promise<Session> {
+  const s = await getSession();
+  if (!s) redirect("/login");
+  if (s.user.role !== "EMPRESA" && s.user.role !== "OPERATOR") {
+    redirect(homeForRole(s.user.role));
+  }
+  return s;
+}
+
+export async function requireSalesRep(): Promise<Session> {
+  const s = await getSession();
+  if (!s) redirect("/login");
+  if (s.user.role !== "COMERCIAL") redirect(homeForRole(s.user.role));
+  return s;
 }

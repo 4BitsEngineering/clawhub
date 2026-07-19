@@ -9,6 +9,8 @@ export const dynamic = "force-dynamic";
 export default async function HomePage() {
   const session = await getSession();
   if (session?.user?.role === "OPERATOR") redirect("/operator");
+  if (session?.user?.role === "EMPRESA") redirect("/empresa");
+  if (session?.user?.role === "COMERCIAL") redirect("/sales");
   if (session?.user?.role === "FIRM_ADMIN") redirect("/firm");
   redirect("/login");
 }
