@@ -2,6 +2,7 @@ import { revalidatePath } from "next/cache";
 import { requireEmpresa } from "@/lib/session";
 import { EmpresaShell } from "@/components/empresa-shell";
 import { db } from "@/lib/db";
+import { sendEmail } from "@/lib/mailer";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -34,7 +35,7 @@ function fmt(cents: number) {
 export default async function EmpresaPage() {
   const session = await requireEmpresa();
 
-  async function invitarComercialAction(formData: FormData) {
+  async function addComercialAction(formData: FormData) {
     "use server";
     await requireEmpresa();
     const email = ((formData.get("email") as string) ?? "").trim().toLowerCase();
@@ -42,6 +43,7 @@ export default async function EmpresaPage() {
     const territory = ((formData.get("territory") as string) ?? "").trim() || null;
     const rateRaw = parseFloat((formData.get("commissionRate") as string) ?? "35");
     const commissionRate = isNaN(rateRaw) ? 0.35 : Math.max(0, Math.min(1, rateRaw / 100));
+    const sendInvite = formData.get("sendInvite") === "true";
     if (!email || !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) return;
     const user = await db.user.upsert({
       where: { email },
@@ -53,6 +55,17 @@ export default async function EmpresaPage() {
       update: { territory, commissionRate },
       create: { userId: user.id, territory, commissionRate },
     });
+    if (sendInvite) {
+      const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000";
+      await sendEmail({
+        to: email,
+        subject: "Tu acceso a AI-Office como comercial",
+        html: `<p>Hola${name ? ` ${name}` : ""},</p>
+<p>Se ha creado tu cuenta de comercial en AI-Office.</p>
+<p>Puedes acceder con tu email en:</p>
+<p><a href="${appUrl}/login">${appUrl}/login</a></p>`,
+      });
+    }
     revalidatePath("/empresa");
   }
 
@@ -166,18 +179,18 @@ export default async function EmpresaPage() {
           ))}
         </div>
 
-        {/* Invitar comercial */}
+        {/* Añadir comercial */}
         <Card className="card-paper">
           <CardHeader>
-            <CardTitle>Invitar comercial</CardTitle>
+            <CardTitle>Añadir comercial</CardTitle>
             <CardDescription>
-              Crea el acceso de un nuevo comercial externo. Si el email ya
-              existe, actualiza sus datos.
+              Crea la cuenta de un nuevo comercial. Si el email ya existe,
+              actualiza sus datos.
             </CardDescription>
           </CardHeader>
           <CardContent>
             <form
-              action={invitarComercialAction}
+              action={addComercialAction}
               className="grid sm:grid-cols-2 lg:grid-cols-4 gap-4 items-end"
             >
               <div className="space-y-2">
@@ -207,10 +220,21 @@ export default async function EmpresaPage() {
                   />
                   <Button
                     type="submit"
+                    name="sendInvite"
+                    value="false"
+                    variant="outline"
+                    className="shrink-0"
+                  >
+                    Crear
+                  </Button>
+                  <Button
+                    type="submit"
+                    name="sendInvite"
+                    value="true"
                     className="shrink-0"
                     style={{ backgroundColor: "var(--brand)", color: "var(--brand-foreground)" }}
                   >
-                    + Invitar
+                    Crear e invitar
                   </Button>
                 </div>
               </div>

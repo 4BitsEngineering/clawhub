@@ -2,6 +2,8 @@ import { revalidatePath } from "next/cache";
 import { requireSalesRep } from "@/lib/session";
 import { SalesShell } from "@/components/sales-shell";
 import { db } from "@/lib/db";
+import { sendEmail } from "@/lib/mailer";
+import { sendSms } from "@/lib/sms";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -86,6 +88,73 @@ export default async function SalesPage() {
     revalidatePath("/sales");
   }
 
+  async function quickSendAction(formData: FormData) {
+    "use server";
+    const s = await requireSalesRep();
+    const salesRep = await db.salesRep.findUnique({ where: { userId: s.user.id } });
+    if (!salesRep) return;
+
+    const campaignId = ((formData.get("campaignId") as string) ?? "").trim();
+    const prospectId = ((formData.get("prospectId") as string) ?? "").trim();
+    const channel = ((formData.get("channel") as string) ?? "EMAIL") as "EMAIL" | "SMS" | "BOTH";
+    if (!campaignId || !prospectId) return;
+
+    const [campaign, prospect] = await Promise.all([
+      db.campaign.findUnique({ where: { id: campaignId } }),
+      db.prospect.findFirst({ where: { id: prospectId, salesRepId: salesRep.id } }),
+    ]);
+    if (!campaign || !prospect) return;
+
+    const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000";
+    const channels: Array<"EMAIL" | "SMS"> = channel === "BOTH" ? ["EMAIL", "SMS"] : [channel];
+
+    for (const ch of channels) {
+      const trackingToken = crypto.randomUUID();
+      const trackingUrl = `${appUrl}/api/t/${trackingToken}`;
+
+      const send = await db.campaignSend.create({
+        data: { campaignId, prospectId, channel: ch, trackingToken, status: "PENDING" },
+      });
+
+      let externalId: string | undefined;
+      let success = false;
+
+      if (ch === "EMAIL") {
+        const html = campaign.bodyEmail.replace(
+          /\{\{link\}\}/g,
+          `<a href="${trackingUrl}" style="color:#7c3aed;font-weight:600">${trackingUrl}</a>`,
+        );
+        const result = await sendEmail({ to: prospect.email, subject: campaign.subject, html });
+        success = !result.error;
+        externalId = result.id;
+      } else if (ch === "SMS" && prospect.phone) {
+        const body = (campaign.bodySms ?? campaign.subject).replace(/\{\{link\}\}/g, trackingUrl);
+        const result = await sendSms({ to: prospect.phone, body });
+        success = !result.error;
+        externalId = result.sid;
+      } else {
+        continue;
+      }
+
+      await db.campaignSend.update({
+        where: { id: send.id },
+        data: { status: success ? "SENT" : "FAILED", externalId: externalId ?? null, sentAt: success ? new Date() : null },
+      });
+    }
+
+    const ADVANCED = new Set(["VISITED_LANDING", "PURCHASED"]);
+    if (!ADVANCED.has(prospect.status)) {
+      await db.prospect.update({ where: { id: prospect.id }, data: { status: "CAMPAIGN_SENT" } });
+    }
+
+    await db.campaign.update({
+      where: { id: campaignId, status: "DRAFT" },
+      data: { status: "SENT", sentAt: new Date() },
+    }).catch(() => {});
+
+    revalidatePath("/sales");
+  }
+
   async function updateStatusAction(formData: FormData) {
     "use server";
     await requireSalesRep();
@@ -99,7 +168,7 @@ export default async function SalesPage() {
     revalidatePath("/sales");
   }
 
-  const [salesRep, commissionSummary] = await Promise.all([
+  const [salesRep, commissionSummary, campaigns] = await Promise.all([
     db.salesRep.findUnique({
       where: { userId: session.user.id },
       include: { prospects: { orderBy: { createdAt: "desc" } } },
@@ -114,6 +183,11 @@ export default async function SalesPage() {
             })
           : null,
       ),
+    db.campaign.findMany({
+      where: { status: { not: "CANCELLED" } },
+      select: { id: true, name: true },
+      orderBy: { createdAt: "desc" },
+    }),
   ]);
 
   if (!salesRep) {
@@ -302,6 +376,7 @@ export default async function SalesPage() {
                           "Teléfono",
                           "Estado",
                           "Añadido",
+                          "Enviar campaña",
                           "Actualizar",
                         ].map((h) => (
                           <TableHead
@@ -348,6 +423,43 @@ export default async function SalesPage() {
                           </TableCell>
                           <TableCell className="text-muted-foreground text-sm">
                             {p.createdAt.toLocaleDateString("es-ES")}
+                          </TableCell>
+                          <TableCell>
+                            {campaigns.length === 0 ? (
+                              <span className="text-xs text-muted-foreground">
+                                Sin campañas
+                              </span>
+                            ) : (
+                              <form
+                                action={quickSendAction}
+                                className="flex gap-1.5 items-center flex-wrap"
+                              >
+                                <input type="hidden" name="prospectId" value={p.id} />
+                                {campaigns.length === 1 ? (
+                                  <input type="hidden" name="campaignId" value={campaigns[0].id} />
+                                ) : (
+                                  <select
+                                    name="campaignId"
+                                    className="text-xs h-8 rounded-lg border border-input bg-transparent px-2 focus:outline-none focus:ring-1 focus:ring-ring"
+                                  >
+                                    {campaigns.map((c) => (
+                                      <option key={c.id} value={c.id}>{c.name}</option>
+                                    ))}
+                                  </select>
+                                )}
+                                <select
+                                  name="channel"
+                                  className="text-xs h-8 rounded-lg border border-input bg-transparent px-2 focus:outline-none focus:ring-1 focus:ring-ring"
+                                >
+                                  <option value="EMAIL">Email</option>
+                                  <option value="SMS">SMS</option>
+                                  <option value="BOTH">Email+SMS</option>
+                                </select>
+                                <Button type="submit" variant="outline" size="sm">
+                                  Enviar
+                                </Button>
+                              </form>
+                            )}
                           </TableCell>
                           <TableCell>
                             <form

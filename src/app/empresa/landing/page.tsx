@@ -70,7 +70,17 @@ export default async function EmpresaLandingPage() {
     revalidatePath(`/oferta/${SLUG}`);
   }
 
-  const landing = await db.landingPage.findUnique({ where: { slug: SLUG } });
+  const landing = await db.landingPage.upsert({
+    where: { slug: SLUG },
+    update: {},
+    create: {
+      slug: SLUG,
+      headline: "Transforma tu empresa con AI-Office",
+      originalPriceCents: 20000,
+      discountPriceCents: 14900,
+      isActive: true,
+    },
+  });
 
   // Convert cents to euros for the form
   const originalEuros = landing

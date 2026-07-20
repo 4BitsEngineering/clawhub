@@ -9,6 +9,7 @@ const navItems = [
   { href: "/operator/stack", label: "Stack", exact: false },
   { href: "/operator/mcp", label: "MCP", exact: false },
   { href: "/operator/activity", label: "Actividad", exact: false },
+  { href: "/empresa", label: "Ventas", exact: false },
 ];
 
 export function OperatorNav() {
