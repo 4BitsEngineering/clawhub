@@ -203,13 +203,21 @@ async function executeCommand(env, cmd) {
 
       // 2. Pedir al bridge que reescriba el openclaw.json (preservando env
       // vars). Si la lista está vacía, vaciamos mcpServers explícitamente.
+      //
+      // `prune: true` es OBLIGATORIO aquí: clawhub es la fuente de verdad de
+      // qué MCP tiene contratados la firma, así que lo que no venga en la
+      // lista debe desaparecer de la máquina — es la vía de REVOCAR un
+      // servidor. El bridge por defecto preserva lo que no se menciona (para
+      // que una llamada parcial de cualquier otro cliente no borre secretos
+      // irrecuperables), de modo que sin este flag la revocación no se
+      // aplicaría y el MCP retirado seguiría vivo en el cliente.
       try {
         const r = await fetchJson(
           `${env.bridgeUrl}/api/mcp/sync`,
           {
             method: 'POST',
             headers: { 'content-type': 'application/json; charset=utf-8' },
-            body: JSON.stringify({ servers }),
+            body: JSON.stringify({ servers, prune: true }),
           },
           30_000,
         );
@@ -221,6 +229,10 @@ async function executeCommand(env, cmd) {
             servers_received: servers.length,
             servers_written: r.body?.servers_written ?? null,
             servers_skipped: r.body?.servers_skipped ?? null,
+            // Qué se revocó y dónde quedó la copia previa: un borrado de
+            // servidores (con sus credenciales) tiene que ser auditable.
+            servers_removed: r.body?.servers_removed ?? null,
+            backup: r.body?.backup ?? null,
             openclaw_config_path: r.body?.path ?? null,
           },
         };
