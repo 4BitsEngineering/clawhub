@@ -59,5 +59,16 @@ export async function GET(req: NextRequest) {
   // de timeout en functions (un .exe de 80MB excede el límite de Vercel
   // serverless edge). Si el downloadUrl es un path de Supabase Storage, lo
   // firmamos a una signed URL caducable; si ya es http(s), pasa-through.
-  return NextResponse.redirect(await resolveDownloadUrl(bundle.downloadUrl), 302);
+  const url = await resolveDownloadUrl(bundle.downloadUrl);
+  // El bundle está registrado pero su binario no se puede servir: el objeto ya
+  // no está en el bucket, o faltan las envs de storage. Antes esto acababa en
+  // `redirect(<path relativo>)` → excepción → 500 opaco. Un 404 explícito dice
+  // qué pasa y distingue este caso de "esa plataforma no se ha publicado".
+  if (!url) {
+    return NextResponse.json(
+      { error: "installer_unavailable", channel, platform, version: bundle.version },
+      { status: 404 },
+    );
+  }
+  return NextResponse.redirect(url, 302);
 }

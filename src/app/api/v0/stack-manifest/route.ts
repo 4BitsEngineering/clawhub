@@ -58,10 +58,15 @@ async function resolveBundle(
       },
     });
     if (!b) return null;
+    const url = await resolveDownloadUrl(b.downloadUrl);
+    // Un bundle cuyo binario ya no está en el bucket no es servible: se anuncia
+    // como ausente en vez de emitir una downloadUrl que el cliente no puede
+    // descargar. Ver el comentario de `resolveDownloadUrl`.
+    if (!url) return null;
     return {
       version: b.version,
       sha256: b.sha256,
-      downloadUrl: await resolveDownloadUrl(b.downloadUrl),
+      downloadUrl: url,
       sizeBytes: b.sizeBytes,
       releaseNotes: b.releaseNotes,
     };
@@ -77,10 +82,12 @@ async function resolveBundle(
     orderBy: { releasedAt: "desc" },
   });
   if (!b) return null;
+  const url = await resolveDownloadUrl(b.downloadUrl);
+  if (!url) return null;
   return {
     version: b.version,
     sha256: b.sha256,
-    downloadUrl: await resolveDownloadUrl(b.downloadUrl),
+    downloadUrl: url,
     sizeBytes: b.sizeBytes,
     releaseNotes: b.releaseNotes,
   };

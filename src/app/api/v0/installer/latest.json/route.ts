@@ -25,9 +25,9 @@ const MANIFEST_OBJECT = "bundles/installer-ai-office-windows-latest.json";
 
 export async function GET() {
   const url = await resolveDownloadUrl(MANIFEST_OBJECT);
-  // Si resolveDownloadUrl no pudo firmar (faltan envs) devuelve el path tal cual:
-  // en ese caso no hay nada público que servir → 404 claro en vez de un redirect roto.
-  if (!/^https?:\/\//i.test(url)) {
+  // null = no se pudo firmar (faltan envs, o el manifiesto no está en el bucket):
+  // no hay nada público que servir → 404 claro en vez de un redirect roto.
+  if (!url) {
     return NextResponse.json(
       { error: "manifest_unavailable" },
       { status: 404 },
