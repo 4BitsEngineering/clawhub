@@ -1,87 +1,96 @@
 # Acciones pendientes — Sales Suite
 
-Todo lo que necesitas configurar para que el sistema funcione en producción (y en local con servicios reales). Sin estas variables todo sigue funcionando en modo silencioso: emails/SMS se loguean en consola, Stripe queda deshabilitado.
+Todo lo que necesitas configurar para que el sistema funcione en producción. Sin estas variables todo sigue funcionando en modo silencioso: emails/SMS se loguean en consola, Stripe queda deshabilitado.
 
 ---
 
-## 1. Variables de entorno
-
-Añade esto en `.env.local` (local) y en tu plataforma de despliegue (Vercel, Railway, etc.):
+## 1. Variables de entorno en `.env.local`
 
 ```bash
-# ── General ────────────────────────────────────────────────────────────────
-# URL pública de la app — necesaria para que los links de tracking funcionen
+# URL pública de la app — necesaria para links de tracking
 NEXT_PUBLIC_APP_URL=https://tudominio.com
 
-# ── Resend (email) ─────────────────────────────────────────────────────────
-# https://resend.com → API Keys
-RESEND_API_KEY=re_xxxxxxxxxxxxxxxxxxxxxxxxxxxx
-# Dominio verificado en Resend
+# Resend (email) — resend.com → API Keys
+RESEND_API_KEY=re_xxxx
 RESEND_FROM=AI-Office <noreply@tudominio.com>
 
-# ── Twilio (SMS) ────────────────────────────────────────────────────────────
-# https://console.twilio.com → Account Info
-TWILIO_ACCOUNT_SID=ACxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
-TWILIO_AUTH_TOKEN=xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
-# Número de teléfono Twilio (con prefijo internacional)
+# Twilio (SMS) — console.twilio.com
+TWILIO_ACCOUNT_SID=ACxxxx
+TWILIO_AUTH_TOKEN=xxxx
 TWILIO_FROM=+34900000000
 
-# ── Stripe (pagos) ──────────────────────────────────────────────────────────
-# https://dashboard.stripe.com → Developers → API keys
-STRIPE_SECRET_KEY=sk_live_xxxx          # sk_test_xxxx en dev
-# Ver sección 2 para obtener este valor
-STRIPE_WEBHOOK_SECRET=whsec_xxxx
+# Stripe (solo para activar el checkout en la landing)
+STRIPE_SECRET_KEY=sk_live_xxxx   # sk_test_xxxx en dev
+```
+
+> `STRIPE_WEBHOOK_SECRET` ya NO va aquí — el webhook vive en Supabase (ver sección 2).
+
+---
+
+## 2. Stripe — webhook en Supabase Edge Function
+
+El webhook está en `supabase/functions/stripe-webhook/index.ts`.
+Su URL pública es siempre:
+```
+https://sbtpydttrswiljnskrsq.supabase.co/functions/v1/stripe-webhook
+```
+
+### Paso A — Exponer el schema `clawhub` en Supabase
+
+Supabase Dashboard → **Settings → API → Extra schemas** → añadir `clawhub` → Guardar.
+
+### Paso B — Añadir secrets a la Edge Function
+
+```bash
+npx supabase secrets set STRIPE_SECRET_KEY=sk_live_xxxx
+npx supabase secrets set STRIPE_WEBHOOK_SECRET=whsec_xxxx
+```
+
+### Paso C — Desplegar la función
+
+```bash
+npx supabase functions deploy stripe-webhook --project-ref sbtpydttrswiljnskrsq
+```
+
+### Paso D — Configurar en Stripe
+
+Dashboard de Stripe → **Developers → Webhooks → Add endpoint**
+- URL: `https://sbtpydttrswiljnskrsq.supabase.co/functions/v1/stripe-webhook`
+- Evento: `checkout.session.completed`
+- Copia el **Signing secret** (`whsec_...`) y úsalo en el paso B.
+
+### Para probar en local
+
+```bash
+npx supabase functions serve stripe-webhook --env-file .env.local
+```
+Y en otra terminal:
+```bash
+stripe listen --forward-to localhost:54321/functions/v1/stripe-webhook
 ```
 
 ---
 
-## 2. Stripe — webhook
+## 3. Resend — verificar dominio
 
-### En local (desarrollo)
-
-1. Instala el [Stripe CLI](https://stripe.com/docs/stripe-cli)
-2. En una terminal aparte, mientras corre `npm run dev`:
-   ```bash
-   stripe listen --forward-to localhost:3000/api/stripe/webhook
-   ```
-3. Copia el `whsec_...` que imprime y ponlo como `STRIPE_WEBHOOK_SECRET` en `.env.local`
-4. Reinicia el servidor de desarrollo
-
-### En producción
-
-1. En el dashboard de Stripe → **Developers → Webhooks → Add endpoint**
-2. URL: `https://tudominio.com/api/stripe/webhook`
-3. Evento a escuchar: `checkout.session.completed`
-4. Copia el **Signing secret** (`whsec_...`) y añádelo como variable de entorno en tu plataforma
-
----
-
-## 3. Resend — verificación de dominio
-
-1. Crea cuenta en [resend.com](https://resend.com)
-2. Ve a **Domains → Add Domain** y añade `tudominio.com`
-3. Añade los registros DNS que te indican (SPF, DKIM, DMARC)
-4. Espera la verificación (suele ser inmediata una vez añadidos los registros)
-5. Copia la API key y ponla en `RESEND_API_KEY`
+1. resend.com → Domains → Add Domain → añade `tudominio.com`
+2. Añade registros DNS (SPF, DKIM, DMARC) en tu proveedor
+3. Copia la API key → `RESEND_API_KEY` en `.env.local`
 
 ---
 
 ## 4. Twilio — número de teléfono
 
-1. Crea cuenta en [twilio.com](https://twilio.com)
-2. Ve a **Phone Numbers → Buy a number** y compra uno con capacidad SMS para España
-3. Copia el **Account SID** y **Auth Token** del dashboard principal
-4. Ponlos en `TWILIO_ACCOUNT_SID`, `TWILIO_AUTH_TOKEN` y `TWILIO_FROM`
-
-> Si solo quieres probar SMS en dev sin gastar, Twilio tiene un sandbox gratuito. El número de prueba no envía SMS reales pero sí registra los envíos.
+1. twilio.com → Phone Numbers → Buy a number (con SMS para España)
+2. Copia Account SID + Auth Token del dashboard
 
 ---
 
 ## 5. Verificación final
 
-Una vez configuradas las variables, comprueba:
-
-- [ ] Los links de tracking en campañas apuntan a `NEXT_PUBLIC_APP_URL/api/t/...`
-- [ ] El email de prueba llega (revisa spam la primera vez)
-- [ ] El webhook de Stripe recibe el evento `checkout.session.completed` y crea la Firm + Comisión
-- [ ] La landing muestra el botón "Contratar ahora" (confirma que `STRIPE_SECRET_KEY` está presente)
+- [ ] Schema `clawhub` expuesto en Supabase API settings
+- [ ] Edge Function desplegada (`supabase functions deploy`)
+- [ ] Webhook apunta a la URL de Supabase en el dashboard de Stripe
+- [ ] `STRIPE_SECRET_KEY` en `.env.local` (activa el checkout en la landing)
+- [ ] Links de tracking apuntan a `NEXT_PUBLIC_APP_URL/api/t/...`
+- [ ] Email de prueba llega correctamente
