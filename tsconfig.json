@@ -29,6 +29,6 @@
     ".next/types/**/*.ts",
     ".next/dev/types/**/*.ts",
     "**/*.mts"
-  ],
+, "supabase/functions/stripe-webhook/index.tsNO"  ],
   "exclude": ["node_modules", "scripts", "prisma/seed.ts"]
 }
