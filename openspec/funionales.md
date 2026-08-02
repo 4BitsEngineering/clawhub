@@ -170,3 +170,24 @@ Acceso: rol `COMERCIAL`
 - [ ] Desactivar `DEV_AUTH_ENABLED` en producción
 - [ ] Configurar email real para magic links de NextAuth
 - [ ] Cambiar `AUTH_URL` a la URL de producción (no localhost)
+
+
+# Openspec
+
+- Formalizados los dos cambios, ambos con 4/4 artefactos completos y validación en verde.
+
+openspec/changes/post-purchase-onboarding/ — cierra el paso 7b del flujo de venta:
+- proposal.md — por qué: el comprador se queda sin acceso al instalador pese a que la infraestructura ya existe; incluye el hallazgo del index.tsNO deshabilitado.
+- design.md — 6 decisiones: Resend por API REST con raw fetch (sin SDK, patrón Twilio), PairingToken generado en la Edge Function, email no bloqueante, success page resuelta vía Prisma con fallback para la carrera redirect-vs-webhook, reconciliación del .tsNO como primer paso, y secrets nuevos en Supabase.
+- specs/post-purchase-onboarding/spec.md — 4 requisitos con 8 escenarios (idempotencia, fallo de Resend, sesión sin email, carrera del webhook…).
+- tasks.md — 13 tareas en 5 grupos, empezando por el diff contra lo desplegado en Supabase.
+
+openspec/changes/production-auth-email/ — magic links reales y producción sin bypass:
+- proposal.md — sustituir el console.log del magic link, unificar remitente, invitaciones sin auto-login dev.
+- design.md — 5 decisiones: reutilizar sendEmail de mailer.ts (conserva el modo dev gratis), mantener el provider Nodemailer solo cambiando el override, remitente canónico info@4bitsengineering.com, invitación redirigida al flujo de magic link, y DEV_AUTH_ENABLED como flag solo-dev apagado por configuración.
+- specs/auth-email/spec.md — 4 requisitos con 8 escenarios, incluida la verificación de que la cookie dev no concede sesión en producción.
+- tasks.md — 12 tareas en 5 grupos, con la verificación del dominio Resend como prerequisito compartido entre ambos cambios.
+
+Quedaron registradas como cuestiones abiertas (no bloqueantes): si el email de bienvenida debe incluir también magic link al panel /firm, y si se activa la validación del parámetro pairing en /api/v0/installer.
+
+Cuando quieras implementar: /opsx:apply post-purchase-onboarding (recomiendo empezar por este, ya que el otro depende del mismo prerequisito de Resend que se resuelve aquí).

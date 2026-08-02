@@ -1,0 +1,1 @@
+{"nodes": [{"id": "c_proyectos_git_4bitsengineering_clawhub_prisma_migrations_20260517081408_add_installer_kind_migration_sql", "label": "migration.sql", "file_type": "code", "source_file": "prisma/migrations/20260517081408_add_installer_kind/migration.sql", "source_location": null}], "edges": []}
