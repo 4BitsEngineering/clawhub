@@ -20,8 +20,10 @@ export async function sendEmail({
     );
     return { id: "dev-noop" };
   }
+  // Remitente canónico — mismo valor que RESEND_FROM en Vercel y en los
+  // secrets de la Edge Function (dominio verificado en Resend).
   const from =
-    process.env.RESEND_FROM ?? "AI-Office <noreply@aioffice.es>";
+    process.env.RESEND_FROM ?? "AI-Office <info@4bitsengineering.com>";
   const { data, error } = await resend.emails.send({
     from,
     to,

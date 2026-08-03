@@ -17,16 +17,32 @@ export default async function SuccessPage({
   // (full data is processed via webhook — this page is just UX confirmation)
   let buyerName: string | null = null;
   let buyerEmail: string | null = null;
+  let pairingCode: string | null = null;
 
   if (session_id) {
     const purchase = await db.purchase.findUnique({
       where: { stripeSessionId: session_id },
-      select: { buyerName: true, buyerEmail: true, status: true },
+      select: { buyerName: true, buyerEmail: true, status: true, firmId: true },
     });
     // Purchase may not exist yet if webhook hasn't fired — that's fine
     if (purchase?.status === "COMPLETED") {
       buyerName = purchase.buyerName;
       buyerEmail = purchase.buyerEmail;
+
+      // Onboarding: el webhook crea un PairingToken para la Firm nueva.
+      // Si aún no existe (carrera redirect-vs-webhook), cae al fallback.
+      if (purchase.firmId) {
+        const token = await db.pairingToken.findFirst({
+          where: {
+            firmId: purchase.firmId,
+            usedAt: null,
+            expiresAt: { gt: new Date() },
+          },
+          orderBy: { createdAt: "desc" },
+          select: { code: true },
+        });
+        pairingCode = token?.code ?? null;
+      }
     }
   }
 
@@ -53,35 +69,70 @@ export default async function SuccessPage({
           </p>
         </div>
 
-        <div className="card-paper rounded-2xl p-8 space-y-4 text-left">
-          <h2 className="font-semibold text-sm uppercase tracking-wider text-muted-foreground">
-            ¿Qué pasa ahora?
-          </h2>
-          <ul className="space-y-3 text-sm">
-            <li className="flex gap-3">
-              <span className="shrink-0 text-brand">①</span>
-              <span>
-                Recibirás un email en{" "}
-                <strong>{buyerEmail ?? "tu dirección de correo"}</strong>{" "}
-                con las instrucciones de acceso.
-              </span>
-            </li>
-            <li className="flex gap-3">
-              <span className="shrink-0 text-brand">②</span>
-              <span>
-                Nuestro equipo configurará tu espacio de trabajo en las
-                próximas 24 horas.
-              </span>
-            </li>
-            <li className="flex gap-3">
-              <span className="shrink-0 text-brand">③</span>
-              <span>
-                Descarga el cliente de escritorio y empieza a usar AI-Office
-                con tu equipo.
-              </span>
-            </li>
-          </ul>
-        </div>
+        {pairingCode ? (
+          <div className="card-paper rounded-2xl p-8 space-y-6 text-left">
+            <h2 className="font-semibold text-sm uppercase tracking-wider text-muted-foreground">
+              Empieza ahora
+            </h2>
+
+            <a
+              href={`/api/v0/installer?pairing=${pairingCode}`}
+              className="block w-full rounded-xl py-4 text-center font-semibold text-white transition-opacity hover:opacity-90"
+              style={{ backgroundColor: "var(--brand)" }}
+            >
+              ⬇ Descargar AI-Office
+            </a>
+
+            <div className="rounded-xl bg-muted/50 p-5 text-center">
+              <p className="text-xs uppercase tracking-wider text-muted-foreground mb-1">
+                Tu código de activación
+              </p>
+              <p className="font-mono text-2xl font-bold tracking-widest">
+                {pairingCode}
+              </p>
+              <p className="text-xs text-muted-foreground mt-2">
+                El instalador te lo pedirá al arrancar. Válido 7 días.
+              </p>
+            </div>
+
+            <p className="text-sm text-muted-foreground">
+              También te hemos enviado este link y el código a{" "}
+              <strong>{buyerEmail ?? "tu email"}</strong> por si lo necesitas
+              más tarde.
+            </p>
+          </div>
+        ) : (
+          <div className="card-paper rounded-2xl p-8 space-y-4 text-left">
+            <h2 className="font-semibold text-sm uppercase tracking-wider text-muted-foreground">
+              ¿Qué pasa ahora?
+            </h2>
+            <ul className="space-y-3 text-sm">
+              <li className="flex gap-3">
+                <span className="shrink-0 text-brand">①</span>
+                <span>
+                  Recibirás un email en{" "}
+                  <strong>{buyerEmail ?? "tu dirección de correo"}</strong>{" "}
+                  con el link de descarga y tu código de activación.
+                </span>
+              </li>
+              <li className="flex gap-3">
+                <span className="shrink-0 text-brand">②</span>
+                <span>
+                  Estamos terminando de preparar tu espacio de trabajo — si
+                  acabas de completar el pago, refresca esta página en unos
+                  segundos.
+                </span>
+              </li>
+              <li className="flex gap-3">
+                <span className="shrink-0 text-brand">③</span>
+                <span>
+                  Descarga el cliente de escritorio y empieza a usar AI-Office
+                  con tu equipo.
+                </span>
+              </li>
+            </ul>
+          </div>
+        )}
 
         <Link
           href={`/oferta/${slug}`}

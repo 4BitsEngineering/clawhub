@@ -116,8 +116,9 @@ export default async function LoginPage({
             Entrar al panel
           </CardTitle>
           <CardDescription>
-            Fase de validación: entra directo como <strong>Operator (Admin)</strong>.
-            El login por email llegará después.
+            {devEnabled
+              ? "Fase de validación: entra directo con un rol o usa tu email."
+              : "Introduce tu email y te enviaremos un enlace de acceso."}
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-6">
@@ -157,19 +158,16 @@ export default async function LoginPage({
                 antes de abrir la URL al público.
               </p>
             </div>
-          ) : (
-            <p className="text-sm text-muted-foreground">
-              El acceso de validación está desactivado. Configura el login real.
-            </p>
-          )}
+          ) : null}
 
-          <details className="border-t pt-3">
+          <details className="border-t pt-3" open={!devEnabled}>
             <summary className="cursor-pointer text-xs text-muted-foreground">
-              Login por email (magic link · próximamente)
+              Login por email (magic link)
             </summary>
             {sent ? (
               <p className="pt-3 text-sm text-muted-foreground">
-                ✔ Magic link generado. Revisa la consola del server.
+                ✔ Enlace de acceso enviado. Revisa tu email — si no llega en
+                unos minutos, mira en spam.
               </p>
             ) : (
               <form action={loginAction} className="space-y-3 pt-3">

@@ -13,16 +13,19 @@ El ORM es Prisma v7 con adapter-pg. El schema `clawhub` está expuesto en la API
 
 ## Login
 
-**Implementado con NextAuth v5 (Auth.js).**
+**Implementado con NextAuth v5 (Auth.js)** — change `production-auth-email` aplicado.
 
-- En **desarrollo**: bypass con botones "Entrar como Operador / Empresa / Comercial" en `/login` (variable `DEV_AUTH_ENABLED=true`). No hace falta contraseña ni email real.
-- En **producción**: magic link por email (el enlace se loguea en consola en dev). Solo puede entrar un email que ya exista en la tabla `User` — si no está dado de alta, no entra.
+- En **desarrollo**: bypass con botones "Entrar como Operador / Empresa / Comercial" en `/login` (variable `DEV_AUTH_ENABLED=true`). Sin `RESEND_API_KEY`, el magic link se loguea en consola.
+- En **producción**: magic link enviado por **email real vía Resend** (`sendVerificationRequest` usa `sendEmail` de `mailer.ts`). Solo puede entrar un email que ya exista en la tabla `User` — el callback `signIn` bloquea la solicitud si no está dado de alta (sin self-signup; no se envía email a desconocidos).
+- **Invitaciones** (`/invite/[token]`): al aceptar ya no hay auto-login con cookie dev — se dispara el magic link real al email invitado, mismo flujo con o sin `DEV_AUTH_ENABLED`.
+- Remitente canónico unificado: `AI-Office <info@4bitsengineering.com>` (`RESEND_FROM`).
 - Roles soportados: `OPERATOR`, `EMPRESA`, `COMERCIAL`, `FIRM_ADMIN`
 - Cada rol tiene su propio layout y rutas protegidas mediante `requireXxx()` en los Server Components.
 
-**Pendiente para producción:**
-- [ ] Configurar proveedor de email real para los magic links (actualmente solo log en consola)
-- [ ] Eliminar `DEV_AUTH_ENABLED=true` del `.env` de producción
+**Pendiente para producción (solo configuración, el código está listo):**
+- [ ] Verificar dominio `4bitsengineering.com` en Resend (SPF/DKIM)
+- [ ] En Vercel: `RESEND_API_KEY`, `RESEND_FROM`, `AUTH_URL` a la URL pública, y `DEV_AUTH_ENABLED` **ausente**
+- [ ] Prueba end-to-end del magic link con un usuario de cada rol
 
 ---
 
@@ -135,12 +138,7 @@ Acceso: rol `COMERCIAL`
 9. La empresa aprueba el pago desde /empresa/commissions
 ```
 
-> **Paso 7b pendiente de completar:** tras crear el usuario FIRM_ADMIN, el comprador debería ser redirigido (o recibir un email) con acceso al **instalador de AI-Office**. La ruta del instalador está por definir — cuando se indique, se añade el redirect/email en la Edge Function justo después de crear el usuario.
-
-**Comportamiento previsto:**
-- El comprador termina el checkout en Stripe
-- Stripe redirige a una página de "gracias" (actualmente la landing, parámetro `success_url`)
-- Desde ahí (o por email automático) accede al instalador con su cuenta ya creada
+> **Paso 7b — IMPLEMENTADO** (change `post-purchase-onboarding`): tras crear el usuario FIRM_ADMIN, la Edge Function genera un `PairingToken` (código de activación XXXX-XXXX, válido 7 días) y envía un **email de bienvenida vía Resend** con el link de descarga del instalador `/api/v0/installer?pairing=<code>`. La **success page** (`/oferta/[slug]/success`) muestra también el botón de descarga y el código — doble vía de entrega. Si el webhook aún no procesó (carrera redirect-vs-webhook), la página muestra el fallback "recibirás un email". Pendiente: redeploy de la función + secrets de Resend (ver tasks del change).
 
 ---
 

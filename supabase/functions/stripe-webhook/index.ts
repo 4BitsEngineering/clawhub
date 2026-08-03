@@ -1,0 +1,362 @@
+import Stripe from "npm:stripe@16";
+import { createClient } from "npm:@supabase/supabase-js@2";
+
+const stripe = new Stripe(Deno.env.get("STRIPE_SECRET_KEY") ?? "", {
+  // @ts-ignore — custom API version
+  apiVersion: "2026-06-24.dahlia",
+});
+
+// Service role key: bypasses RLS y puede acceder a todos los schemas
+const supabase = createClient(
+  Deno.env.get("SUPABASE_URL") ?? "",
+  Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "",
+);
+
+// Todas las tablas viven en el schema 'clawhub'
+// Prerrequisito: Settings → API → Extra schemas → añadir 'clawhub'
+const db = supabase.schema("clawhub");
+
+// NOTA sobre ids/updatedAt: los @default(uuid()/cuid()) y @updatedAt de Prisma
+// se generan en el CLIENTE Prisma, no en la BD. Al insertar vía PostgREST hay
+// que aportarlos explícitamente o el INSERT falla por NOT NULL.
+
+Deno.serve(async (req: Request) => {
+  const sig = req.headers.get("stripe-signature");
+  if (!sig) return new Response("Missing stripe-signature", { status: 400 });
+
+  const body = await req.text();
+
+  let event: Stripe.Event;
+  try {
+    event = await stripe.webhooks.constructEventAsync(
+      body,
+      sig,
+      Deno.env.get("STRIPE_WEBHOOK_SECRET") ?? "",
+    );
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : "Unknown";
+    console.error("[stripe-webhook] Signature error:", msg);
+    return new Response(`Webhook Error: ${msg}`, { status: 400 });
+  }
+
+  if (event.type === "checkout.session.completed") {
+    await handleCheckoutCompleted(
+      event.data.object as Stripe.Checkout.Session,
+    );
+  }
+
+  return new Response("ok", { status: 200 });
+});
+
+async function handleCheckoutCompleted(session: Stripe.Checkout.Session) {
+  // Idempotencia: si ya existe, ignorar
+  const { data: existing } = await db
+    .from("Purchase")
+    .select("id")
+    .eq("stripeSessionId", session.id)
+    .maybeSingle();
+
+  if (existing) return;
+
+  const trackingToken =
+    (session.metadata?.trackingToken as string | undefined) ?? null;
+  const amountCents = session.amount_total ?? 0;
+  const currency = (session.currency ?? "eur").toUpperCase();
+  const buyerEmail =
+    (session.customer_details as { email?: string } | null)?.email ?? null;
+  const buyerName =
+    (session.customer_details as { name?: string } | null)?.name ?? null;
+  const now = new Date().toISOString();
+
+  // ── Resolver atribución ──────────────────────────────────────────────────
+  let prospectId: string | null = null;
+  let salesRepId: string | null = null;
+
+  if (trackingToken) {
+    const { data: send } = await db
+      .from("CampaignSend")
+      .select("prospectId")
+      .eq("trackingToken", trackingToken)
+      .maybeSingle();
+
+    if (send) {
+      prospectId = send.prospectId;
+
+      const { data: prospect } = await db
+        .from("Prospect")
+        .select("salesRepId")
+        .eq("id", prospectId)
+        .maybeSingle();
+
+      salesRepId = prospect?.salesRepId ?? null;
+
+      // Marcar visita de landing como convertida
+      await db
+        .from("LandingVisit")
+        .update({ convertedAt: now })
+        .eq("trackingToken", trackingToken)
+        .is("convertedAt", null);
+    }
+  }
+
+  // ── Nombre para la Firm ──────────────────────────────────────────────────
+  let firmName = buyerName ?? buyerEmail ?? "Nueva empresa";
+  if (prospectId) {
+    const { data: p } = await db
+      .from("Prospect")
+      .select("name")
+      .eq("id", prospectId)
+      .maybeSingle();
+    if (p?.name) firmName = p.name;
+  }
+
+  // ── Crear Firm ───────────────────────────────────────────────────────────
+  const { data: firm, error: firmErr } = await db
+    .from("Firm")
+    .insert({
+      id: crypto.randomUUID(),
+      name: firmName,
+      plan: "STARTER",
+      seatsPurchased: 1,
+      status: "active",
+      updatedAt: now,
+    })
+    .select("id")
+    .single();
+
+  if (firmErr || !firm) {
+    console.error("[stripe-webhook] Error creando Firm:", firmErr);
+    return;
+  }
+
+  // ── Crear/actualizar usuario FIRM_ADMIN ──────────────────────────────────
+  // No usamos upsert: sobrescribiría el id del usuario existente y rompería FKs.
+  if (buyerEmail) {
+    const { data: existingUser } = await db
+      .from("User")
+      .select("id")
+      .eq("email", buyerEmail)
+      .maybeSingle();
+
+    if (existingUser) {
+      await db
+        .from("User")
+        .update({
+          name: buyerName,
+          role: "FIRM_ADMIN",
+          firmId: firm.id,
+          emailVerified: now,
+          updatedAt: now,
+        })
+        .eq("id", existingUser.id);
+    } else {
+      await db.from("User").insert({
+        id: crypto.randomUUID(),
+        email: buyerEmail,
+        name: buyerName,
+        role: "FIRM_ADMIN",
+        firmId: firm.id,
+        emailVerified: now,
+        updatedAt: now,
+      });
+    }
+  }
+
+  // ── Registrar Purchase ───────────────────────────────────────────────────
+  const { data: purchase, error: purchaseErr } = await db
+    .from("Purchase")
+    .insert({
+      id: crypto.randomUUID(),
+      stripeSessionId: session.id,
+      stripePaymentIntent:
+        typeof session.payment_intent === "string"
+          ? session.payment_intent
+          : null,
+      productType: "ANNUAL_LICENSE",
+      amountCents,
+      currency,
+      status: "COMPLETED",
+      firmId: firm.id,
+      buyerEmail,
+      buyerName,
+      completedAt: now,
+      prospectId,
+      trackingToken,
+    })
+    .select("id")
+    .single();
+
+  if (purchaseErr || !purchase) {
+    console.error("[stripe-webhook] Error creando Purchase:", purchaseErr);
+    return;
+  }
+
+  // ── Actualizar Prospect ──────────────────────────────────────────────────
+  if (prospectId) {
+    await db
+      .from("Prospect")
+      .update({ status: "PURCHASED", convertedFirmId: firm.id })
+      .eq("id", prospectId);
+  }
+
+  // ── Crear Comisión ───────────────────────────────────────────────────────
+  if (salesRepId) {
+    const { data: rep } = await db
+      .from("SalesRep")
+      .select("commissionRate")
+      .eq("id", salesRepId)
+      .maybeSingle();
+
+    if (rep) {
+      await db.from("Commission").insert({
+        id: crypto.randomUUID(),
+        purchaseId: purchase.id,
+        salesRepId,
+        rate: rep.commissionRate,
+        amountCents: Math.round(amountCents * rep.commissionRate),
+        status: "PENDING",
+      });
+    }
+  }
+
+  // ── Onboarding: PairingToken + email de bienvenida ───────────────────────
+  // El fallo de cualquiera de los dos NO bloquea el webhook: la compra y la
+  // comisión ya están registradas y la success page es la vía redundante.
+  const pairingCode = await createPairingToken(firm.id);
+  if (pairingCode && buyerEmail) {
+    await sendWelcomeEmail({
+      to: buyerEmail,
+      name: buyerName,
+      code: pairingCode,
+    });
+  }
+
+  console.log(
+    `[stripe-webhook] ✓ Compra procesada — Firm "${firmName}" (${firm.id}) · ${amountCents / 100} ${currency}` +
+      (salesRepId ? ` · comisión para ${salesRepId}` : "") +
+      (pairingCode ? ` · pairing ${pairingCode}` : " · SIN pairing token"),
+  );
+}
+
+// ── PairingToken ───────────────────────────────────────────────────────────
+
+// Código de instalación de larga vida: el comprador puede abrir el email horas
+// o días después. Mismo criterio que DEFAULT_PAIRING_MINUTES en
+// src/app/api/v0/register/route.ts (7 días).
+const PAIRING_TTL_MS = 7 * 24 * 60 * 60 * 1000;
+
+async function createPairingToken(firmId: string): Promise<string | null> {
+  // code es @unique → reintento ante colisión (rarísima)
+  for (let attempt = 0; attempt < 5; attempt++) {
+    const code = generatePairingCode();
+    const { error } = await db.from("PairingToken").insert({
+      id: crypto.randomUUID(),
+      firmId,
+      code,
+      expiresAt: new Date(Date.now() + PAIRING_TTL_MS).toISOString(),
+    });
+    if (!error) return code;
+    if (error.code === "23505") continue;
+    console.error("[stripe-webhook] Error creando PairingToken:", error);
+    return null;
+  }
+  console.error("[stripe-webhook] PairingToken: colisiones agotadas");
+  return null;
+}
+
+// Réplica en Deno del formato de generatePairingCode (src/lib/tokens.ts):
+// XXXX-XXXX, 8 chars, alfabeto sin 0/O/1/I/L. La Edge Function no puede
+// importar código de src/ — mantener ambos en sincronía si cambia el formato.
+function generatePairingCode(): string {
+  const alphabet = "ABCDEFGHJKMNPQRSTUVWXYZ23456789";
+  let code = "";
+  for (let i = 0; i < 8; i++) {
+    code += alphabet[randomInt(alphabet.length)];
+    if (i === 3) code += "-";
+  }
+  return code;
+}
+
+// Equivalente sin sesgo de módulo a crypto.randomInt de Node (rejection sampling)
+function randomInt(max: number): number {
+  const limit = Math.floor(256 / max) * max;
+  const buf = new Uint8Array(1);
+  let v: number;
+  do {
+    crypto.getRandomValues(buf);
+    v = buf[0];
+  } while (v >= limit);
+  return v % max;
+}
+
+// ── Email de bienvenida (API REST de Resend, raw fetch sin SDK) ────────────
+
+async function sendWelcomeEmail(opts: {
+  to: string;
+  name: string | null;
+  code: string;
+}) {
+  const apiKey = Deno.env.get("RESEND_API_KEY");
+  if (!apiKey) {
+    console.warn(
+      "[stripe-webhook] RESEND_API_KEY ausente — email de bienvenida omitido",
+    );
+    return;
+  }
+
+  const from =
+    Deno.env.get("RESEND_FROM") ?? "AI-Office <info@4bitsengineering.com>";
+  const appUrl = Deno.env.get("APP_URL") ?? "https://clawhub-three.vercel.app";
+  const installerUrl = `${appUrl}/api/v0/installer?pairing=${opts.code}`;
+  const firstName = opts.name?.split(" ")[0] ?? null;
+
+  const html = `
+<div style="font-family:-apple-system,Segoe UI,Roboto,sans-serif;max-width:560px;margin:0 auto;padding:32px 24px;color:#1a1a1a">
+  <h1 style="font-size:22px;margin:0 0 8px">¡Bienvenido a AI-Office${firstName ? `, ${firstName}` : ""}! 🎉</h1>
+  <p style="color:#555;line-height:1.6">
+    Tu licencia anual está activa. Para empezar, descarga el instalador y
+    usa tu código de activación cuando te lo pida.
+  </p>
+  <div style="text-align:center;margin:28px 0">
+    <a href="${installerUrl}"
+       style="display:inline-block;background:#065f46;color:#fff;text-decoration:none;padding:14px 28px;border-radius:10px;font-weight:600">
+      Descargar AI-Office
+    </a>
+  </div>
+  <div style="background:#f6f6f4;border-radius:10px;padding:16px 20px;margin:20px 0">
+    <p style="margin:0 0 4px;font-size:12px;text-transform:uppercase;letter-spacing:.05em;color:#888">Tu código de activación</p>
+    <p style="margin:0;font-size:24px;font-weight:700;font-family:ui-monospace,Consolas,monospace;letter-spacing:.1em">${opts.code}</p>
+    <p style="margin:8px 0 0;font-size:12px;color:#888">Válido durante 7 días. Si caduca, escríbenos y te enviamos uno nuevo.</p>
+  </div>
+  <p style="color:#555;line-height:1.6;font-size:14px">
+    ¿Dudas? Responde a este email y te ayudamos con la instalación.
+  </p>
+  <p style="color:#aaa;font-size:12px;margin-top:32px">AI-Office · 4bits Engineering</p>
+</div>`;
+
+  try {
+    const res = await fetch("https://api.resend.com/emails", {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${apiKey}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        from,
+        to: [opts.to],
+        subject: "Tu acceso a AI-Office — descarga el instalador",
+        html,
+      }),
+    });
+    if (!res.ok) {
+      console.error(
+        `[stripe-webhook] Resend ${res.status}:`,
+        await res.text(),
+      );
+    } else {
+      console.log(`[stripe-webhook] ✓ Email de bienvenida enviado a ${opts.to}`);
+    }
+  } catch (err) {
+    console.error("[stripe-webhook] Error enviando email de bienvenida:", err);
+  }
+}

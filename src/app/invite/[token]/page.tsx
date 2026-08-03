@@ -3,8 +3,8 @@
  *
  * Flujo:
  *   1. GET muestra resumen: "Te han invitado a Asesoría XYZ como firm_admin".
- *   2. POST (form action) crea/asocia el User y le mete una cookie de sesión
- *      dev (DEV_AUTH_ENABLED) o redirige a magic-link cuando Resend esté.
+ *   2. POST (form action) crea/asocia el User y dispara el magic link a su
+ *      email (signIn "nodemailer") — el acceso se completa al abrir el enlace.
  *
  * Si la invitación ha caducado / ya se usó → mensaje claro.
  *
@@ -12,11 +12,10 @@
  * firmId/role siempre y cuando no sea un downgrade peligroso (un OPERATOR
  * que recibe invite FIRM_ADMIN no se degrada).
  */
-import { cookies } from "next/headers";
-import { redirect, notFound } from "next/navigation";
+import { notFound } from "next/navigation";
 import { db } from "@/lib/db";
+import { signIn } from "@/lib/auth";
 import { recordActivity, systemActor } from "@/lib/activity";
-import { DEV_COOKIE } from "@/lib/session";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 
@@ -102,20 +101,13 @@ export default async function InvitePage({
       },
     });
 
-    // Auto-login mientras Resend no está. Setea la cookie dev y redirige.
-    // En prod (sin DEV_AUTH_ENABLED) este path no auto-loguea — el user
-    // tendrá que ir a /login y usar magic link (cuando llegue).
-    if (process.env.DEV_AUTH_ENABLED === "true") {
-      const c = await cookies();
-      c.set(DEV_COOKIE, user.id, {
-        httpOnly: true,
-        sameSite: "lax",
-        path: "/",
-        maxAge: 60 * 60 * 24 * 30, // 30 días
-      });
-    }
-
-    redirect(user.role === "OPERATOR" ? "/operator" : "/firm");
+    // Enviar el magic link al email invitado. signIn lanza el redirect a la
+    // página verifyRequest (/login?sent=1); el acceso se completa al abrir
+    // el enlace del email — mismo flujo con o sin DEV_AUTH_ENABLED.
+    await signIn("nodemailer", {
+      email: fresh.email,
+      redirectTo: user.role === "OPERATOR" ? "/operator" : "/firm",
+    });
   }
 
   return (
@@ -180,7 +172,9 @@ export default async function InvitePage({
                 Aceptar invitación
               </Button>
               <p className="text-xs text-muted-foreground mt-2 text-center">
-                Caduca el {invitation.expiresAt.toLocaleString("es-ES")}
+                Al aceptar te enviaremos un enlace de acceso a{" "}
+                <strong>{invitation.email}</strong>. Caduca el{" "}
+                {invitation.expiresAt.toLocaleString("es-ES")}
               </p>
             </form>
           )}
