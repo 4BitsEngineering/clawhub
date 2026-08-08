@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { revalidatePath } from "next/cache";
-import { requireEmpresa } from "@/lib/session";
+import { requireOperator } from "@/lib/session";
 import { EmpresaShell } from "@/components/empresa-shell";
 import { db } from "@/lib/db";
 import { Badge } from "@/components/ui/badge";
@@ -25,11 +25,11 @@ const STATUS_LABELS: Record<string, string> = {
 };
 
 export default async function EmpresaCampaignsPage() {
-  const session = await requireEmpresa();
+  const session = await requireOperator();
 
   async function createCampaignAction(formData: FormData) {
     "use server";
-    const s = await requireEmpresa();
+    const s = await requireOperator();
 
     const name = ((formData.get("name") as string) ?? "").trim();
     const subject = ((formData.get("subject") as string) ?? "").trim();
@@ -73,7 +73,7 @@ export default async function EmpresaCampaignsPage() {
   });
 
   return (
-    <EmpresaShell email={session.user.email}>
+    <EmpresaShell email={session.user.email} isOperator>
       <div className="space-y-8">
         <div>
           <h1 className="font-display text-2xl font-semibold tracking-tight">

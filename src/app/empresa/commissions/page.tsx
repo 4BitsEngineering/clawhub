@@ -80,7 +80,7 @@ export default async function EmpresaCommissionsPage() {
   const pendingCount = commissions.filter((c) => c.status === "PENDING").length;
 
   return (
-    <EmpresaShell email={session.user.email}>
+    <EmpresaShell email={session.user.email} isOperator={session.user.role === "OPERATOR"}>
       <div className="space-y-8">
         <div className="flex items-center justify-between gap-4 flex-wrap">
           <div>

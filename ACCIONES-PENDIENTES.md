@@ -24,10 +24,25 @@
 - Webhook Stripe migrado a Supabase Edge Function (`supabase/functions/stripe-webhook/index.ts`)
 
 ### Infraestructura (acciones tuyas — completadas)
-- [x] Schema `clawhub` expuesto en Supabase API (Settings → API → Extra schemas)
-- [x] Secrets añadidos a la Edge Function (`STRIPE_SECRET_KEY` + `STRIPE_WEBHOOK_SECRET`)
+- [x] Schema `clawhub` **expuesto en Data API** (Settings → API → Data API → Exposed schemas → marcar `clawhub`). ⚠️ Sin esto la Edge Function respondía 200 pero no escribía nada.
+- [x] **GRANT a `service_role`** sobre el schema `clawhub` (ver SQL abajo). Prisma crea el schema con el rol `postgres` y Supabase no da permisos automáticos a `service_role` sobre schemas custom.
+- [x] Secrets añadidos a la Edge Function (`STRIPE_SECRET_KEY` + `STRIPE_WEBHOOK_SECRET` + `RESEND_API_KEY` + `RESEND_FROM` + `APP_URL`)
 - [x] Edge Function desplegada (`supabase functions deploy stripe-webhook`)
 - [x] Webhook configurado en Stripe → URL de Supabase, evento `checkout.session.completed`
+- [x] **Flujo de compra verificado end-to-end** (2026-08-08): pago → Purchase + Firm + usuario FIRM_ADMIN + licencia (PairingToken) + email de bienvenida + success page con código y descarga. ✅
+
+### SQL de permisos para `service_role` (ejecutado en SQL Editor)
+
+Necesario tras cada migración que cree tablas nuevas en `clawhub` (o dejar el
+toggle "Automatically expose new tables" activado + estos default privileges):
+
+```sql
+GRANT USAGE ON SCHEMA clawhub TO service_role;
+GRANT ALL ON ALL TABLES IN SCHEMA clawhub TO service_role;
+GRANT ALL ON ALL SEQUENCES IN SCHEMA clawhub TO service_role;
+ALTER DEFAULT PRIVILEGES IN SCHEMA clawhub GRANT ALL ON TABLES TO service_role;
+ALTER DEFAULT PRIVILEGES IN SCHEMA clawhub GRANT ALL ON SEQUENCES TO service_role;
+```
 
 ### `.env.local` actual
 ```bash
@@ -42,7 +57,7 @@ DEV_AUTH_ENABLED="true"           # quitar en producción
 NEXT_PUBLIC_APP_URL=https://clawhub-three.vercel.app
 
 RESEND_API_KEY=re_xxxx
-RESEND_FROM=AI-Office <info@4bitsengineering.com>
+RESEND_FROM=AI-Office <info@iaofi.com>
 
 TWILIO_ACCOUNT_SID=ACxxxx
 TWILIO_AUTH_TOKEN=xxxx

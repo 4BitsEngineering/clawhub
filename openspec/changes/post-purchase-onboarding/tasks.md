@@ -7,11 +7,11 @@
 
 ## 2. Prerequisitos operativos (Resend y secrets)
 
-- [ ] 2.1 Verificar el dominio `4bitsengineering.com` en Resend (registros DNS SPF/DKIM) — **USUARIO**
-- [ ] 2.2 Añadir secrets a la Edge Function en Supabase: `RESEND_API_KEY`, `RESEND_FROM` (`AI-Office <info@4bitsengineering.com>`), `APP_URL` — **USUARIO** (escritura de secrets bloqueada en modo auto; comando exacto abajo)
+- [x] 2.1 Verificar el dominio `iaofi.com` en Resend (registros DNS SPF/DKIM) — hecho
+- [ ] 2.2 Añadir secrets a la Edge Function en Supabase: `RESEND_API_KEY`, `RESEND_FROM` (`AI-Office <info@iaofi.com>`), `APP_URL` — **USUARIO** (escritura de secrets bloqueada en modo auto; comando exacto abajo)
 
 ```bash
-npx supabase secrets set "RESEND_API_KEY=<tu re_...>" "RESEND_FROM=AI-Office <info@4bitsengineering.com>" "APP_URL=https://clawhub-three.vercel.app" --project-ref sbtpydttrswiljnskrsq
+npx supabase secrets set "RESEND_API_KEY=<tu re_...>" "RESEND_FROM=AI-Office <info@iaofi.com>" "APP_URL=https://clawhub-three.vercel.app" --project-ref sbtpydttrswiljnskrsq
 npx supabase functions deploy stripe-webhook --project-ref sbtpydttrswiljnskrsq
 ```
 

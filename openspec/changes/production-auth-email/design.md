@@ -6,7 +6,7 @@ Auth es NextAuth v5 con adapter Prisma y sesión en base de datos (`src/lib/auth
 
 - `src/lib/session.ts` mira primero la cookie de dev (`clawhub-dev-user`) y solo cae a `auth()` si no existe; el bypass se activa con `DEV_AUTH_ENABLED=true`.
 - `/invite/[token]/page.tsx:108` hace auto-login con esa cookie al aceptar una invitación ("mientras Resend no está").
-- `src/lib/mailer.ts` ya envía por Resend cuando hay `RESEND_API_KEY` y hace console.log en dev; su fallback de remitente (`noreply@aioffice.es`) diverge del documentado (`info@4bitsengineering.com`).
+- `src/lib/mailer.ts` ya envía por Resend cuando hay `RESEND_API_KEY` y hace console.log en dev; su fallback de remitente (`noreply@aioffice.es`) diverge del documentado (`info@iaofi.com`).
 - Solo emails preexistentes en la tabla `User` pueden entrar (regla actual que se conserva).
 
 ## Goals / Non-Goals
@@ -40,7 +40,7 @@ Se conserva `next-auth/providers/nodemailer` con el override; el transporte SMTP
 
 - **Por qué:** cambio mínimo; el id de provider (`"nodemailer"`) ya está referenciado en `signIn("nodemailer", ...)` en `/login`. Cambiar de provider obligaría a tocar más superficie sin beneficio funcional.
 
-### D3 — Remitente canónico `AI-Office <info@4bitsengineering.com>` vía `RESEND_FROM`
+### D3 — Remitente canónico `AI-Office <info@iaofi.com>` vía `RESEND_FROM`
 
 Se corrige el fallback de `mailer.ts` para que coincida con el valor documentado, y `RESEND_FROM` se define en todos los entornos (local, Vercel, y secrets de la Edge Function del otro cambio).
 

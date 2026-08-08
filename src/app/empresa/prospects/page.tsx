@@ -80,7 +80,7 @@ export default async function EmpresaProspectsPage({
   const activeFilters = [rep, validStatus].filter(Boolean).length;
 
   return (
-    <EmpresaShell email={session.user.email}>
+    <EmpresaShell email={session.user.email} isOperator={session.user.role === "OPERATOR"}>
       <div className="space-y-8">
         <div className="flex items-start justify-between gap-4 flex-wrap">
           <div>

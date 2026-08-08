@@ -4,9 +4,12 @@ import { ThemeToggle } from "@/components/theme-toggle";
 
 export function EmpresaShell({
   email,
+  isOperator = false,
   children,
 }: {
   email: string;
+  // Campañas y Landing solo las edita el administrador (OPERATOR)
+  isOperator?: boolean;
   children: React.ReactNode;
 }) {
   return (
@@ -36,18 +39,22 @@ export function EmpresaShell({
               >
                 Mis prospects
               </Link>
-              <Link
-                href="/empresa/campaigns"
-                className="px-3 py-1 text-xs text-violet-200/80 hover:text-white hover:bg-white/10 rounded transition-colors"
-              >
-                Campañas
-              </Link>
-              <Link
-                href="/empresa/landing"
-                className="px-3 py-1 text-xs text-violet-200/80 hover:text-white hover:bg-white/10 rounded transition-colors"
-              >
-                Landing
-              </Link>
+              {isOperator && (
+                <>
+                  <Link
+                    href="/empresa/campaigns"
+                    className="px-3 py-1 text-xs text-violet-200/80 hover:text-white hover:bg-white/10 rounded transition-colors"
+                  >
+                    Campañas
+                  </Link>
+                  <Link
+                    href="/empresa/landing"
+                    className="px-3 py-1 text-xs text-violet-200/80 hover:text-white hover:bg-white/10 rounded transition-colors"
+                  >
+                    Landing
+                  </Link>
+                </>
+              )}
               <Link
                 href="/empresa/commissions"
                 className="px-3 py-1 text-xs text-violet-200/80 hover:text-white hover:bg-white/10 rounded transition-colors"

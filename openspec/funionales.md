@@ -18,12 +18,12 @@ El ORM es Prisma v7 con adapter-pg. El schema `clawhub` está expuesto en la API
 - En **desarrollo**: bypass con botones "Entrar como Operador / Empresa / Comercial" en `/login` (variable `DEV_AUTH_ENABLED=true`). Sin `RESEND_API_KEY`, el magic link se loguea en consola.
 - En **producción**: magic link enviado por **email real vía Resend** (`sendVerificationRequest` usa `sendEmail` de `mailer.ts`). Solo puede entrar un email que ya exista en la tabla `User` — el callback `signIn` bloquea la solicitud si no está dado de alta (sin self-signup; no se envía email a desconocidos).
 - **Invitaciones** (`/invite/[token]`): al aceptar ya no hay auto-login con cookie dev — se dispara el magic link real al email invitado, mismo flujo con o sin `DEV_AUTH_ENABLED`.
-- Remitente canónico unificado: `AI-Office <info@4bitsengineering.com>` (`RESEND_FROM`).
+- Remitente canónico unificado: `AI-Office <info@iaofi.com>` (`RESEND_FROM`).
 - Roles soportados: `OPERATOR`, `EMPRESA`, `COMERCIAL`, `FIRM_ADMIN`
 - Cada rol tiene su propio layout y rutas protegidas mediante `requireXxx()` en los Server Components.
 
 **Pendiente para producción (solo configuración, el código está listo):**
-- [ ] Verificar dominio `4bitsengineering.com` en Resend (SPF/DKIM)
+- [x] Verificar dominio `iaofi.com` en Resend (SPF/DKIM) — hecho
 - [ ] En Vercel: `RESEND_API_KEY`, `RESEND_FROM`, `AUTH_URL` a la URL pública, y `DEV_AUTH_ENABLED` **ausente**
 - [ ] Prueba end-to-end del magic link con un usuario de cada rol
 
@@ -72,9 +72,14 @@ Acceso: roles `EMPRESA` y `OPERATOR`
 - Acción "Marcar pagada" por fila
 - Acción "Marcar todas pagadas" en bulk
 
-#### Editor de landing `/empresa/landing`
+#### Campañas `/empresa/campaigns` — **solo administrador (OPERATOR)**
+- Crear y editar campañas: nombre, asunto, cuerpo del email (con placeholder `{{link}}`), cuerpo SMS
+- El rol EMPRESA no ve estos enlaces en el menú y es redirigido si entra por URL
+
+#### Editor de landing `/empresa/landing` — **solo administrador (OPERATOR)**
 - Editar headline, precios (original / con descuento), activar/desactivar
 - La landing se crea automáticamente con valores por defecto si aún no existe en BD (corregido bug de 404)
+- Misma restricción que campañas: contenido comercial lo controla solo el admin
 
 ---
 
@@ -162,7 +167,7 @@ Acceso: rol `COMERCIAL`
 ## Acciones pendientes (solo para producción)
 
 - [ ] **Indicar la ruta del instalador de AI-Office** para completar el flujo post-compra (redirect o email automático desde la Edge Function)
-- [ ] Verificar dominio en Resend para enviar emails desde dominio propio
+- [x] Verificar dominio en Resend (`iaofi.com`) — hecho
 - [ ] Cambiar `STRIPE_SECRET_KEY` a `sk_live_...` en `.env` y en Supabase secrets
 - [ ] Crear webhook de Stripe de producción (misma URL de Supabase, evento `checkout.session.completed`)
 - [ ] Desactivar `DEV_AUTH_ENABLED` en producción
@@ -182,7 +187,7 @@ openspec/changes/post-purchase-onboarding/ — cierra el paso 7b del flujo de ve
 
 openspec/changes/production-auth-email/ — magic links reales y producción sin bypass:
 - proposal.md — sustituir el console.log del magic link, unificar remitente, invitaciones sin auto-login dev.
-- design.md — 5 decisiones: reutilizar sendEmail de mailer.ts (conserva el modo dev gratis), mantener el provider Nodemailer solo cambiando el override, remitente canónico info@4bitsengineering.com, invitación redirigida al flujo de magic link, y DEV_AUTH_ENABLED como flag solo-dev apagado por configuración.
+- design.md — 5 decisiones: reutilizar sendEmail de mailer.ts (conserva el modo dev gratis), mantener el provider Nodemailer solo cambiando el override, remitente canónico info@iaofi.com, invitación redirigida al flujo de magic link, y DEV_AUTH_ENABLED como flag solo-dev apagado por configuración.
 - specs/auth-email/spec.md — 4 requisitos con 8 escenarios, incluida la verificación de que la cookie dev no concede sesión en producción.
 - tasks.md — 12 tareas en 5 grupos, con la verificación del dominio Resend como prerequisito compartido entre ambos cambios.
 

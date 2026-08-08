@@ -68,7 +68,7 @@ Descargar la versión desplegada (`supabase functions download stripe-webhook`),
 
 ### D6 — Secrets nuevos en Supabase
 
-`RESEND_API_KEY`, `RESEND_FROM` (valor canónico: `AI-Office <info@4bitsengineering.com>`) y `APP_URL` (para construir el link del instalador en el email).
+`RESEND_API_KEY`, `RESEND_FROM` (valor canónico: `AI-Office <info@iaofi.com>`) y `APP_URL` (para construir el link del instalador en el email).
 
 ## Risks / Trade-offs
 

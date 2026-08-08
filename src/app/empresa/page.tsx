@@ -133,7 +133,7 @@ export default async function EmpresaPage() {
   );
 
   return (
-    <EmpresaShell email={session.user.email}>
+    <EmpresaShell email={session.user.email} isOperator={session.user.role === "OPERATOR"}>
       <div className="space-y-8">
         <div>
           <h1 className="font-display text-2xl font-semibold tracking-tight">

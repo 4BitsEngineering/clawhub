@@ -1,6 +1,6 @@
 import { notFound } from "next/navigation";
 import { revalidatePath } from "next/cache";
-import { requireEmpresa } from "@/lib/session";
+import { requireOperator } from "@/lib/session";
 import { EmpresaShell } from "@/components/empresa-shell";
 import { db } from "@/lib/db";
 import { Badge } from "@/components/ui/badge";
@@ -37,12 +37,12 @@ export default async function EmpresaCampaignDetailPage({
 }: {
   params: Promise<{ id: string }>;
 }) {
-  const session = await requireEmpresa();
+  const session = await requireOperator();
   const { id } = await params;
 
   async function updateCampaignAction(formData: FormData) {
     "use server";
-    await requireEmpresa();
+    await requireOperator();
     const name = ((formData.get("name") as string) ?? "").trim();
     const subject = ((formData.get("subject") as string) ?? "").trim();
     const bodyEmail = ((formData.get("bodyEmail") as string) ?? "").trim();
@@ -79,7 +79,7 @@ export default async function EmpresaCampaignDetailPage({
   const clickedCount = campaign.sends.filter((s) => s.clickedAt).length;
 
   return (
-    <EmpresaShell email={session.user.email}>
+    <EmpresaShell email={session.user.email} isOperator>
       <div className="space-y-8">
         <div className="flex items-center justify-between gap-4 flex-wrap">
           <div>

@@ -18,11 +18,11 @@ Cuando un usuario solicita acceso desde `/login`, el sistema SHALL enviar el mag
 - **THEN** el sistema no crea usuario ni concede acceso (regla existente conservada)
 
 ### Requirement: Remitente canónico unificado
-Todos los emails de la aplicación SHALL usar el remitente configurado en `RESEND_FROM`, con valor canónico `AI-Office <info@4bitsengineering.com>`, y el fallback por defecto de `src/lib/mailer.ts` SHALL coincidir con ese valor.
+Todos los emails de la aplicación SHALL usar el remitente configurado en `RESEND_FROM`, con valor canónico `AI-Office <info@iaofi.com>`, y el fallback por defecto de `src/lib/mailer.ts` SHALL coincidir con ese valor.
 
 #### Scenario: Envío sin RESEND_FROM definido
 - **WHEN** se envía cualquier email y `RESEND_FROM` no está definida en el entorno
-- **THEN** el remitente usado es `AI-Office <info@4bitsengineering.com>`
+- **THEN** el remitente usado es `AI-Office <info@iaofi.com>`
 
 ### Requirement: Aceptación de invitación sin bypass de desarrollo
 La aceptación de una invitación en `/invite/[token]` SHALL completarse mediante el flujo de magic link, sin plantar la cookie de auto-login de desarrollo, con independencia del valor de `DEV_AUTH_ENABLED`.

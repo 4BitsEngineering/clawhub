@@ -34,4 +34,4 @@ Además, el archivo de la Edge Function está deshabilitado en el repo (`supabas
 - **Sistemas:** Supabase Edge Functions (redeploy), Resend (requiere dominio verificado), Stripe webhook (sin cambios de contrato).
 - **Secrets:** añadir `RESEND_API_KEY`, `RESEND_FROM`, `NEXT_PUBLIC_APP_URL` a los secrets de la Edge Function.
 - **Dependencias:** ninguna nueva (raw fetch, sin SDK).
-- **Prerequisito operativo:** verificar el dominio de envío en Resend (`info@4bitsengineering.com`).
+- **Prerequisito operativo:** verificar el dominio de envío en Resend (`info@iaofi.com`).

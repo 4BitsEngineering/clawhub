@@ -110,24 +110,23 @@ export default async function SuccessPage({
               <li className="flex gap-3">
                 <span className="shrink-0 text-brand">①</span>
                 <span>
-                  Recibirás un email en{" "}
+                  Estamos generando tu licencia. Te la enviaremos a{" "}
                   <strong>{buyerEmail ?? "tu dirección de correo"}</strong>{" "}
-                  con el link de descarga y tu código de activación.
+                  junto con el enlace de descarga del instalador.
                 </span>
               </li>
               <li className="flex gap-3">
                 <span className="shrink-0 text-brand">②</span>
                 <span>
-                  Estamos terminando de preparar tu espacio de trabajo — si
-                  acabas de completar el pago, refresca esta página en unos
-                  segundos.
+                  Ejecuta el instalador en tu PC e introduce la licencia
+                  cuando te la pida.
                 </span>
               </li>
               <li className="flex gap-3">
                 <span className="shrink-0 text-brand">③</span>
                 <span>
-                  Descarga el cliente de escritorio y empieza a usar AI-Office
-                  con tu equipo.
+                  Empieza a usar AI-Office con tu equipo — nosotros dejamos
+                  tu espacio de trabajo listo en las próximas 24 horas.
                 </span>
               </li>
             </ul>

@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { revalidatePath } from "next/cache";
-import { requireEmpresa } from "@/lib/session";
+import { requireOperator } from "@/lib/session";
 import { EmpresaShell } from "@/components/empresa-shell";
 import { db } from "@/lib/db";
 import { toEmbedUrl } from "@/lib/video-embed";
@@ -20,11 +20,11 @@ export const dynamic = "force-dynamic";
 const SLUG = "ai-office";
 
 export default async function EmpresaLandingPage() {
-  const session = await requireEmpresa();
+  const session = await requireOperator();
 
   async function saveLandingAction(formData: FormData) {
     "use server";
-    await requireEmpresa();
+    await requireOperator();
 
     const headline = ((formData.get("headline") as string) ?? "").trim();
     const videoRaw = ((formData.get("videoUrl") as string) ?? "").trim();
@@ -98,7 +98,7 @@ export default async function EmpresaLandingPage() {
   }
 
   return (
-    <EmpresaShell email={session.user.email}>
+    <EmpresaShell email={session.user.email} isOperator>
       <div className="space-y-8">
         <div className="flex items-center justify-between gap-4 flex-wrap">
           <div>

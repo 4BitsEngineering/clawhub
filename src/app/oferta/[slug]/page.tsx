@@ -1,9 +1,22 @@
 import { notFound, redirect } from "next/navigation";
 import { after } from "next/server";
 import { cookies } from "next/headers";
+import type Stripe from "stripe";
 import { db } from "@/lib/db";
 import { stripe, ANNUAL_LICENSE_NAME, ANNUAL_LICENSE_DESC } from "@/lib/stripe";
 import { CountdownTimer } from "@/components/countdown-timer";
+
+// Email del prospect si llegó por un link de tracking de campaña
+async function emailFromAttribution(): Promise<string | null> {
+  const cookieStore = await cookies();
+  const attribution = cookieStore.get("clawhub-attribution")?.value ?? null;
+  if (!attribution) return null;
+  const send = await db.campaignSend.findUnique({
+    where: { trackingToken: attribution },
+    include: { prospect: { select: { email: true } } },
+  });
+  return send?.prospect.email ?? null;
+}
 
 export const dynamic = "force-dynamic";
 
@@ -20,29 +33,31 @@ export default async function LandingPublicPage({
   const stripeEnabled = !!stripe;
   const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000";
 
-  async function checkoutAction() {
+  async function checkoutAction(formData: FormData) {
     "use server";
     if (!stripe) return;
 
     const cookieStore = await cookies();
     const attribution = cookieStore.get("clawhub-attribution")?.value ?? null;
 
-    // Pre-fill email from attribution if available
-    let customerEmail: string | undefined;
-    if (attribution) {
-      const send = await db.campaignSend.findUnique({
-        where: { trackingToken: attribution },
-        include: { prospect: { select: { email: true } } },
-      });
-      customerEmail = send?.prospect.email;
-    }
+    // Email: el que escribe el cliente en la landing; si no, el del prospect
+    // atribuido por tracking. Siempre se pasa a Stripe (checkout no lo pide).
+    const formEmail = ((formData.get("email") as string) ?? "")
+      .trim()
+      .toLowerCase();
+    const customerEmail = formEmail || (await emailFromAttribution()) || null;
+    if (!customerEmail) return;
 
     const lp = await db.landingPage.findUnique({ where: { slug } });
     if (!lp) return;
 
     const session = await stripe.checkout.sessions.create({
       mode: "payment",
+      // Tarjeta como método de pago. Requiere desactivar Managed Payments en
+      // esta sesión (con él activo, Stripe elige los métodos y añade el IVA
+      // encima del precio anunciado; el IVA lo facturamos nosotros).
       payment_method_types: ["card"],
+      managed_payments: { enabled: false },
       line_items: [
         {
           price_data: {
@@ -50,6 +65,7 @@ export default async function LandingPublicPage({
             product_data: {
               name: ANNUAL_LICENSE_NAME,
               description: ANNUAL_LICENSE_DESC,
+              tax_code: "txcd_10103000",
             },
             unit_amount: lp.discountPriceCents,
           },
@@ -60,13 +76,16 @@ export default async function LandingPublicPage({
         trackingToken: attribution ?? "",
         landingSlug: slug,
       },
-      ...(customerEmail ? { customer_email: customerEmail } : {}),
+      customer_email: customerEmail,
       success_url: `${appUrl}/oferta/${slug}/success?session_id={CHECKOUT_SESSION_ID}`,
       cancel_url: `${appUrl}/oferta/${slug}`,
-    });
+    } as Stripe.Checkout.SessionCreateParams);
 
     if (session.url) redirect(session.url);
   }
+
+  // Si llegó por link de campaña, ya sabemos quién es → precargar su email
+  const knownEmail = await emailFromAttribution();
 
   // Registrar visita orgánica (sin bloquear el render)
   after(async () => {
@@ -152,14 +171,29 @@ export default async function LandingPublicPage({
           )}
 
           {stripeEnabled ? (
-            <form action={checkoutAction}>
+            <form
+              action={checkoutAction}
+              className="max-w-md mx-auto space-y-3"
+            >
+              <input
+                type="email"
+                name="email"
+                required
+                defaultValue={knownEmail ?? undefined}
+                placeholder="Tu email de empresa"
+                autoComplete="email"
+                className="w-full px-4 py-3 rounded-xl border border-border bg-background text-center text-base focus:outline-none focus:ring-2 focus:ring-[var(--brand)]"
+              />
               <button
                 type="submit"
-                className="w-full sm:w-auto px-12 py-4 rounded-xl font-semibold text-white text-lg transition-opacity hover:opacity-90 active:opacity-75"
+                className="w-full px-12 py-4 rounded-xl font-semibold text-white text-lg transition-opacity hover:opacity-90 active:opacity-75"
                 style={{ backgroundColor: "var(--brand)" }}
               >
                 Contratar ahora →
               </button>
+              <p className="text-xs text-muted-foreground">
+                Te enviaremos la licencia y el instalador a este email.
+              </p>
             </form>
           ) : (
             <button

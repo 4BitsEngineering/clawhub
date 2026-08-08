@@ -40,9 +40,17 @@ Deno.serve(async (req: Request) => {
   }
 
   if (event.type === "checkout.session.completed") {
-    await handleCheckoutCompleted(
-      event.data.object as Stripe.Checkout.Session,
-    );
+    try {
+      await handleCheckoutCompleted(
+        event.data.object as Stripe.Checkout.Session,
+      );
+    } catch (err) {
+      // El fallo se registra en logs pero respondemos 200 igualmente: si el
+      // error es transitorio, Stripe reintenta; si es de datos, un 500 solo
+      // provocaría reintentos en bucle. Revisar logs de la función ante fallos.
+      const msg = err instanceof Error ? err.message : String(err);
+      console.error("[stripe-webhook] handler error:", msg);
+    }
   }
 
   return new Response("ok", { status: 200 });
@@ -50,12 +58,21 @@ Deno.serve(async (req: Request) => {
 
 async function handleCheckoutCompleted(session: Stripe.Checkout.Session) {
   // Idempotencia: si ya existe, ignorar
-  const { data: existing } = await db
+  const { data: existing, error: existingErr } = await db
     .from("Purchase")
     .select("id")
     .eq("stripeSessionId", session.id)
     .maybeSingle();
 
+  // Un error aquí casi siempre es de acceso al schema/tabla (schema clawhub no
+  // expuesto en la Data API, o falta GRANT a service_role). Lo propagamos para
+  // no seguir a ciegas y crear registros a medias.
+  if (existingErr) {
+    throw new Error(
+      `select Purchase falló: ${existingErr.message} (code ${existingErr.code}). ` +
+        `¿Schema 'clawhub' expuesto en Data API y con GRANT a service_role?`,
+    );
+  }
   if (existing) return;
 
   const trackingToken =
@@ -125,8 +142,10 @@ async function handleCheckoutCompleted(session: Stripe.Checkout.Session) {
     .single();
 
   if (firmErr || !firm) {
-    console.error("[stripe-webhook] Error creando Firm:", firmErr);
-    return;
+    throw new Error(
+      `insert Firm falló: ${firmErr?.message ?? "sin fila devuelta"}` +
+        (firmErr?.code ? ` (code ${firmErr.code})` : ""),
+    );
   }
 
   // ── Crear/actualizar usuario FIRM_ADMIN ──────────────────────────────────
@@ -187,8 +206,10 @@ async function handleCheckoutCompleted(session: Stripe.Checkout.Session) {
     .single();
 
   if (purchaseErr || !purchase) {
-    console.error("[stripe-webhook] Error creando Purchase:", purchaseErr);
-    return;
+    throw new Error(
+      `insert Purchase falló: ${purchaseErr?.message ?? "sin fila devuelta"}` +
+        (purchaseErr?.code ? ` (code ${purchaseErr.code})` : ""),
+    );
   }
 
   // ── Actualizar Prospect ──────────────────────────────────────────────────
@@ -305,7 +326,7 @@ async function sendWelcomeEmail(opts: {
   }
 
   const from =
-    Deno.env.get("RESEND_FROM") ?? "AI-Office <info@4bitsengineering.com>";
+    Deno.env.get("RESEND_FROM") ?? "AI-Office <info@iaofi.com>";
   const appUrl = Deno.env.get("APP_URL") ?? "https://clawhub-three.vercel.app";
   const installerUrl = `${appUrl}/api/v0/installer?pairing=${opts.code}`;
   const firstName = opts.name?.split(" ")[0] ?? null;
