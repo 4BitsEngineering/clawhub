@@ -71,6 +71,14 @@ STRIPE_SECRET_KEY=sk_test_xxxx    # cambiar a sk_live en producción
 
 ## Pendiente
 
+### Redeploy del webhook — change `checkout-fee-and-token-subscription`
+El webhook se amplió (comisión sobre el fee, creación de la suscripción de renovación del fee, registro de periodo/importe de tokens). **Requiere redeploy** para que las compras nuevas del modelo fee+tokens se procesen bien:
+```bash
+npx supabase functions deploy stripe-webhook --project-ref sbtpydttrswiljnskrsq
+```
+- La migración de BD (columnas nuevas en `LandingPage` y `Purchase`) **ya está aplicada** (`prisma db push`), y el GRANT a `service_role` sobre las tablas ya cubre las columnas nuevas.
+- Prueba de test tras el redeploy: comprar en la landing eligiendo un periodo de tokens → verificar en Stripe la factura inicial (fee + tokens), la suscripción de tokens activa y la de renovación del fee en `trialing` (sin cobro), y en la BD que la comisión = rate × fee (sin tokens).
+
 ### Antes de ir a producción
 - [ ] Cambiar `STRIPE_SECRET_KEY` a `sk_live_...` (en `.env.local` y en Supabase secrets)
 - [ ] Cambiar `DEV_AUTH_ENABLED` a `false` o quitar la variable

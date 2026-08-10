@@ -75,15 +75,36 @@ async function handleCheckoutCompleted(session: Stripe.Checkout.Session) {
   }
   if (existing) return;
 
-  const trackingToken =
-    (session.metadata?.trackingToken as string | undefined) ?? null;
-  const amountCents = session.amount_total ?? 0;
+  const meta = session.metadata ?? {};
+  const trackingToken = (meta.trackingToken as string | undefined) || null;
+  const amountCents = session.amount_total ?? 0; // total cobrado (fee año 1 + tokens)
   const currency = (session.currency ?? "eur").toUpperCase();
   const buyerEmail =
     (session.customer_details as { email?: string } | null)?.email ?? null;
   const buyerName =
     (session.customer_details as { name?: string } | null)?.name ?? null;
   const now = new Date().toISOString();
+
+  // Desglose fee/tokens desde la metadata del checkout. feeAmountCents es la
+  // BASE DE COMISIÓN (los tokens quedan siempre excluidos). Con compras del
+  // flujo antiguo (sin estos campos) caemos al total como fee.
+  const feeAmountCents = meta.feeAmountCents
+    ? parseInt(meta.feeAmountCents as string, 10)
+    : amountCents;
+  const feeRenewalCents = meta.feeRenewalCents
+    ? parseInt(meta.feeRenewalCents as string, 10)
+    : feeAmountCents;
+  const tokenBillingPeriod = (meta.tokenBillingPeriod as string | undefined) || null;
+  const tokenAmountCents = meta.tokenAmountCents
+    ? parseInt(meta.tokenAmountCents as string, 10)
+    : null;
+
+  // Suscripción de tokens creada por el checkout, y el customer para anclar la
+  // segunda suscripción (renovación anual del fee).
+  const tokenSubscriptionId =
+    typeof session.subscription === "string" ? session.subscription : null;
+  const customerId =
+    typeof session.customer === "string" ? session.customer : null;
 
   // ── Resolver atribución ──────────────────────────────────────────────────
   let prospectId: string | null = null;
@@ -181,6 +202,16 @@ async function handleCheckoutCompleted(session: Stripe.Checkout.Session) {
     }
   }
 
+  // ── Renovación anual del fee (2ª suscripción, anclada al año siguiente) ────
+  // El año 1 ya se cobró en el checkout como line item one-time. Esta
+  // suscripción no cobra nada ahora (trial_end = +1 año) y renueva a precio de
+  // lista. No bloquea el flujo: si falla, se registra y se sigue.
+  const feeSubscriptionId = await createFeeRenewalSubscription({
+    customerId,
+    renewalCents: feeRenewalCents,
+    currency: (session.currency ?? "eur").toLowerCase(),
+  });
+
   // ── Registrar Purchase ───────────────────────────────────────────────────
   const { data: purchase, error: purchaseErr } = await db
     .from("Purchase")
@@ -193,6 +224,11 @@ async function handleCheckoutCompleted(session: Stripe.Checkout.Session) {
           : null,
       productType: "ANNUAL_LICENSE",
       amountCents,
+      feeAmountCents,
+      tokenBillingPeriod,
+      tokenAmountCents,
+      stripeSubscriptionId: tokenSubscriptionId,
+      stripeFeeSubscriptionId: feeSubscriptionId,
       currency,
       status: "COMPLETED",
       firmId: firm.id,
@@ -229,12 +265,13 @@ async function handleCheckoutCompleted(session: Stripe.Checkout.Session) {
       .maybeSingle();
 
     if (rep) {
+      // Comisión SOLO sobre el fee, nunca sobre el total (excluye tokens).
       await db.from("Commission").insert({
         id: crypto.randomUUID(),
         purchaseId: purchase.id,
         salesRepId,
         rate: rep.commissionRate,
-        amountCents: Math.round(amountCents * rep.commissionRate),
+        amountCents: Math.round(feeAmountCents * rep.commissionRate),
         status: "PENDING",
       });
     }
@@ -253,10 +290,59 @@ async function handleCheckoutCompleted(session: Stripe.Checkout.Session) {
   }
 
   console.log(
-    `[stripe-webhook] ✓ Compra procesada — Firm "${firmName}" (${firm.id}) · ${amountCents / 100} ${currency}` +
+    `[stripe-webhook] ✓ Compra procesada — Firm "${firmName}" (${firm.id}) · total ${amountCents / 100} ${currency}` +
+      ` · fee ${feeAmountCents / 100}` +
+      (tokenBillingPeriod ? ` · tokens ${tokenBillingPeriod}` : "") +
       (salesRepId ? ` · comisión para ${salesRepId}` : "") +
+      (feeSubscriptionId ? ` · fee-sub ${feeSubscriptionId}` : " · SIN fee-sub") +
       (pairingCode ? ` · pairing ${pairingCode}` : " · SIN pairing token"),
   );
+}
+
+// ── Renovación anual del fee ─────────────────────────────────────────────────
+
+// Crea la 2ª suscripción (fee anual) sobre el mismo customer, sin cobro ahora:
+// trial_end a +1 año → el primer cargo ocurre en la renovación. El año 1 ya se
+// pagó como line item one-time en el checkout. Idempotencia: no se crea si no
+// hay customer. Fallo no bloqueante (se registra y se devuelve null).
+async function createFeeRenewalSubscription(opts: {
+  customerId: string | null;
+  renewalCents: number;
+  currency: string;
+}): Promise<string | null> {
+  if (!opts.customerId) {
+    console.warn("[stripe-webhook] Sin customer — no se crea la sub de fee");
+    return null;
+  }
+  if (!opts.renewalCents || opts.renewalCents <= 0) return null;
+
+  // +1 año en segundos (evitamos new Date() por el runtime; usamos el epoch).
+  const oneYear = 365 * 24 * 60 * 60;
+  const trialEnd = Math.floor(Date.now() / 1000) + oneYear;
+
+  try {
+    const sub = await stripe.subscriptions.create({
+      customer: opts.customerId,
+      items: [
+        {
+          price_data: {
+            currency: opts.currency,
+            product_data: { name: "AI-Office · Licencia Anual (renovación)" },
+            unit_amount: opts.renewalCents,
+            recurring: { interval: "year", interval_count: 1 },
+          },
+        },
+      ],
+      trial_end: trialEnd,
+      proration_behavior: "none",
+      metadata: { kind: "fee-renewal" },
+    });
+    return sub.id;
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    console.error("[stripe-webhook] Error creando sub de renovación del fee:", msg);
+    return null;
+  }
 }
 
 // ── PairingToken ───────────────────────────────────────────────────────────

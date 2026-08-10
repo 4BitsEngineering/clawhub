@@ -1,5 +1,5 @@
 import { revalidatePath } from "next/cache";
-import { requireEmpresa } from "@/lib/session";
+import { requireEmpresa, requireOperator } from "@/lib/session";
 import { EmpresaShell } from "@/components/empresa-shell";
 import { db } from "@/lib/db";
 import { Badge } from "@/components/ui/badge";
@@ -20,6 +20,10 @@ import {
 } from "@/components/ui/table";
 
 export const dynamic = "force-dynamic";
+
+// Prefijo en Commission.notes que marca una comisión creada por atribución
+// manual (permite distinguirlas de las automáticas y habilitar el reverso).
+const MANUAL_TAG = "Atribución manual";
 
 function fmt(cents: number) {
   return (cents / 100).toLocaleString("es-ES", {
@@ -53,6 +57,83 @@ export default async function EmpresaCommissionsPage() {
     revalidatePath("/empresa/commissions");
   }
 
+  // Atribución manual (solo OPERATOR): asignar una compra existente a un
+  // comercial creando su comisión. Misma fórmula que el webhook de Stripe
+  // (supabase/functions/stripe-webhook/index.ts) — si cambia, actualizar ambos.
+  async function attributePurchaseAction(formData: FormData) {
+    "use server";
+    const op = await requireOperator();
+    const purchaseId = ((formData.get("purchaseId") as string) ?? "").trim();
+    const salesRepId = ((formData.get("salesRepId") as string) ?? "").trim();
+    if (!purchaseId || !salesRepId) return;
+
+    const [purchase, rep] = await Promise.all([
+      db.purchase.findUnique({
+        where: { id: purchaseId },
+        select: {
+          id: true,
+          amountCents: true,
+          feeAmountCents: true,
+          status: true,
+          commission: { select: { id: true } },
+        },
+      }),
+      db.salesRep.findUnique({
+        where: { id: salesRepId },
+        select: { id: true, commissionRate: true },
+      }),
+    ]);
+
+    // Guardas: compra completada, sin comisión previa, comercial válido.
+    if (!purchase || !rep) return;
+    if (purchase.status !== "COMPLETED") return;
+    if (purchase.commission) return;
+
+    // Base de comisión = fee (excluye tokens). Fallback a amountCents para
+    // compras antiguas anteriores al desglose fee/tokens.
+    const feeBase = purchase.feeAmountCents ?? purchase.amountCents;
+
+    try {
+      await db.commission.create({
+        data: {
+          purchaseId: purchase.id,
+          salesRepId: rep.id,
+          rate: rep.commissionRate,
+          amountCents: Math.round(feeBase * rep.commissionRate),
+          status: "PENDING",
+          notes: `${MANUAL_TAG} · ${op.user.email} · ${new Date().toISOString()}`,
+        },
+      });
+    } catch (err) {
+      // Colisión con el @unique de purchaseId (doble submit / carrera) → no-op.
+      const msg = (err as Error).message ?? "";
+      if (!msg.includes("Unique constraint")) throw err;
+    }
+    revalidatePath("/empresa/commissions");
+  }
+
+  // Reverso de una atribución manual mientras esté PENDING. Nunca borra
+  // comisiones automáticas ni comisiones ya pagadas.
+  async function undoAttributionAction(formData: FormData) {
+    "use server";
+    await requireOperator();
+    const commissionId = ((formData.get("commissionId") as string) ?? "").trim();
+    if (!commissionId) return;
+
+    const comm = await db.commission.findUnique({
+      where: { id: commissionId },
+      select: { id: true, status: true, notes: true },
+    });
+    if (!comm) return;
+    if (comm.status !== "PENDING") return;
+    if (!comm.notes?.startsWith(MANUAL_TAG)) return;
+
+    await db.commission.delete({ where: { id: comm.id } });
+    revalidatePath("/empresa/commissions");
+  }
+
+  const isOperator = session.user.role === "OPERATOR";
+
   const commissions = await db.commission.findMany({
     include: {
       salesRep: {
@@ -70,6 +151,35 @@ export default async function EmpresaCommissionsPage() {
     },
     orderBy: { createdAt: "desc" },
   });
+  // La consulta incluye `notes` por defecto (no hay select), así que basta con
+  // leerlo para saber si una comisión es de origen manual.
+
+  // Atribución manual (solo OPERATOR): compras completadas sin comisión + los
+  // comerciales activos a los que asignarlas. Solo se consulta si es operador.
+  const [unattributed, activeReps] = isOperator
+    ? await Promise.all([
+        db.purchase.findMany({
+          where: { status: "COMPLETED", commission: { is: null } },
+          select: {
+            id: true,
+            amountCents: true,
+            completedAt: true,
+            buyerName: true,
+            buyerEmail: true,
+          },
+          orderBy: { completedAt: "desc" },
+        }),
+        db.salesRep.findMany({
+          where: { status: "ACTIVE" },
+          select: {
+            id: true,
+            commissionRate: true,
+            user: { select: { name: true, email: true } },
+          },
+          orderBy: { createdAt: "asc" },
+        }),
+      ])
+    : [[], []];
 
   const pendingCents = commissions
     .filter((c) => c.status === "PENDING")
@@ -127,6 +237,97 @@ export default async function EmpresaCommissionsPage() {
             </div>
           ))}
         </div>
+
+        {/* Atribución manual — solo OPERATOR */}
+        {isOperator && unattributed.length > 0 && (
+          <Card className="card-paper p-0 overflow-hidden border-amber-500/30">
+            <CardHeader className="px-6 py-4 border-b">
+              <CardTitle className="text-base">
+                Compras sin atribuir ({unattributed.length})
+              </CardTitle>
+              <p className="text-sm text-muted-foreground mt-1">
+                Compras completadas sin comercial asociado. Asígnalas para
+                generar su comisión con la tarifa vigente del comercial.
+              </p>
+            </CardHeader>
+            <CardContent className="p-0">
+              <div className="overflow-x-auto">
+                <Table>
+                  <TableHeader>
+                    <TableRow className="bg-muted/30 hover:bg-muted/30">
+                      {["Comprador", "Venta", "Fecha", "Atribuir a"].map((h) => (
+                        <TableHead
+                          key={h}
+                          className="text-[11px] font-semibold uppercase tracking-wider whitespace-nowrap"
+                        >
+                          {h}
+                        </TableHead>
+                      ))}
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {unattributed.map((p) => (
+                      <TableRow
+                        key={p.id}
+                        className="hover:bg-muted/20 transition-colors"
+                      >
+                        <TableCell>
+                          <div className="font-medium">{p.buyerName ?? "—"}</div>
+                          {p.buyerEmail && (
+                            <div className="text-xs text-muted-foreground">
+                              {p.buyerEmail}
+                            </div>
+                          )}
+                        </TableCell>
+                        <TableCell className="tabular-nums font-medium">
+                          {fmt(p.amountCents)}
+                        </TableCell>
+                        <TableCell className="text-muted-foreground text-sm whitespace-nowrap">
+                          {p.completedAt
+                            ? p.completedAt.toLocaleDateString("es-ES")
+                            : "—"}
+                        </TableCell>
+                        <TableCell>
+                          {activeReps.length === 0 ? (
+                            <span className="text-xs text-muted-foreground">
+                              Sin comerciales activos
+                            </span>
+                          ) : (
+                            <form
+                              action={attributePurchaseAction}
+                              className="flex items-center gap-2"
+                            >
+                              <input type="hidden" name="purchaseId" value={p.id} />
+                              <select
+                                name="salesRepId"
+                                required
+                                defaultValue=""
+                                className="h-9 rounded-md border border-border bg-background px-2 text-sm max-w-[180px]"
+                              >
+                                <option value="" disabled>
+                                  Elegir comercial…
+                                </option>
+                                {activeReps.map((r) => (
+                                  <option key={r.id} value={r.id}>
+                                    {(r.user.name ?? r.user.email) +
+                                      ` · ${Math.round(r.commissionRate * 100)}%`}
+                                  </option>
+                                ))}
+                              </select>
+                              <Button type="submit" size="sm">
+                                Atribuir
+                              </Button>
+                            </form>
+                          )}
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </div>
+            </CardContent>
+          </Card>
+        )}
 
         {/* Tabla */}
         {commissions.length === 0 ? (
@@ -225,16 +426,36 @@ export default async function EmpresaCommissionsPage() {
                         </TableCell>
                         <TableCell>
                           {c.status === "PENDING" ? (
-                            <form action={markPaidAction}>
-                              <input type="hidden" name="id" value={c.id} />
-                              <Button
-                                type="submit"
-                                variant="outline"
-                                size="sm"
-                              >
-                                Marcar pagada
-                              </Button>
-                            </form>
+                            <div className="flex items-center gap-2">
+                              <form action={markPaidAction}>
+                                <input type="hidden" name="id" value={c.id} />
+                                <Button
+                                  type="submit"
+                                  variant="outline"
+                                  size="sm"
+                                >
+                                  Marcar pagada
+                                </Button>
+                              </form>
+                              {/* Deshacer solo atribuciones manuales (OPERATOR) */}
+                              {isOperator && c.notes?.startsWith(MANUAL_TAG) && (
+                                <form action={undoAttributionAction}>
+                                  <input
+                                    type="hidden"
+                                    name="commissionId"
+                                    value={c.id}
+                                  />
+                                  <Button
+                                    type="submit"
+                                    variant="ghost"
+                                    size="sm"
+                                    className="text-muted-foreground"
+                                  >
+                                    Deshacer
+                                  </Button>
+                                </form>
+                              )}
+                            </div>
                           ) : (
                             <span className="text-xs text-muted-foreground">
                               ✓

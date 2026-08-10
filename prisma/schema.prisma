@@ -832,8 +832,17 @@ model LandingPage {
   headline            String    @default("Transforma tu empresa con AI-Office")
   videoUrl            String    @default("")
   bodyHtml            String    @default("")
-  originalPriceCents  Int       @default(20000)  // en céntimos: 200,00 €
-  discountPriceCents  Int       @default(14900)  // 149,00 €
+  // Fee de licencia (suscripción anual). originalPriceCents = precio de
+  // renovación anual; discountPriceCents = precio efectivo del primer año
+  // (base de comisión). El descuento puede definirse en importe o en %.
+  originalPriceCents  Int       @default(20000)  // renovación: 200,00 €
+  discountPriceCents  Int       @default(14900)  // primer año: 149,00 €
+  feeDiscountType     DiscountType @default(ABSOLUTE)
+  feeDiscountPercent  Int?      // solo si feeDiscountType = PERCENT (0-100)
+  // Tokens (suscripción de consumo). Precio mensual base; los periodos largos
+  // son múltiplo exacto (×3/×6/×12). tokenPeriods = periodos ofrecidos.
+  tokenMonthlyPriceCents Int    @default(2000)   // 20,00 €/mes
+  tokenPeriods        TokenBillingPeriod[] @default([MONTHLY, QUARTERLY, SEMIANNUAL, ANNUAL])
   currency            String    @default("EUR")
   discountEndsAt      DateTime?
   stripeProductId     String?
@@ -844,6 +853,18 @@ model LandingPage {
 
   campaigns Campaign[]
   visits    LandingVisit[]
+}
+
+enum DiscountType {
+  ABSOLUTE
+  PERCENT
+}
+
+enum TokenBillingPeriod {
+  MONTHLY
+  QUARTERLY
+  SEMIANNUAL
+  ANNUAL
 }
 
 /**
@@ -951,7 +972,14 @@ model Purchase {
   stripeSessionId     String        @unique
   stripePaymentIntent String?
   productType         ProductType   @default(ANNUAL_LICENSE)
-  amountCents         Int
+  amountCents         Int           // total cobrado en el checkout (fee año 1 + primer periodo de tokens)
+  // Desglose fee/tokens. feeAmountCents es la base de la comisión (los tokens
+  // quedan siempre excluidos). Nullable para compras anteriores al cambio.
+  feeAmountCents      Int?
+  tokenBillingPeriod  TokenBillingPeriod?
+  tokenAmountCents    Int?
+  stripeSubscriptionId    String?   // suscripción de tokens
+  stripeFeeSubscriptionId String?   // suscripción de renovación anual del fee
   currency            String        @default("EUR")
   status              PurchaseStatus @default(PENDING)
   firmId              String?       // Firm.id creada al completar (sin FK)

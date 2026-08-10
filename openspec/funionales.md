@@ -71,6 +71,12 @@ Acceso: roles `EMPRESA` y `OPERATOR`
 - Tabla completa con: comercial, comprador, importe venta, comisión, porcentaje, estado, fechas
 - Acción "Marcar pagada" por fila
 - Acción "Marcar todas pagadas" en bulk
+- **Atribución manual (solo OPERATOR)** — change `manual-commission-attribution`:
+  - Sección "Compras sin atribuir": lista las compras `COMPLETED` sin comisión
+  - Selector de comercial por fila → crea la comisión con la tarifa vigente del comercial (misma fórmula que el webhook), estado PENDING, con traza en `notes`
+  - Botón "Deshacer" en comisiones manuales aún pendientes (revierte errores de asignación); no aplica a comisiones pagadas ni automáticas
+  - El `@unique` de `Commission.purchaseId` impide duplicar comisión sobre una misma compra
+  - El rol EMPRESA no ve la sección ni el botón de deshacer
 
 #### Campañas `/empresa/campaigns` — **solo administrador (OPERATOR)**
 - Crear y editar campañas: nombre, asunto, cuerpo del email (con placeholder `{{link}}`), cuerpo SMS
@@ -121,6 +127,23 @@ Acceso: rol `COMERCIAL`
 - Links de tracking: cada enlace enviado por un comercial lleva `?t=TOKEN`
   - El token se registra al visitar (`LandingVisit`) y al comprar (`Purchase`)
   - Permite atribuir la venta al comercial correcto automáticamente
+
+### Modelo de precios — change `checkout-fee-and-token-subscription`
+
+La venta tiene **dos conceptos**, ambos como suscripción de Stripe:
+
+1. **Fee de licencia** — suscripción **anual**. Primer año a precio con descuento (149€), renovaciones a precio de lista (200€).
+2. **Tokens** — suscripción de consumo a 20€/mes, con periodo elegible por el cliente: **mensual (20€), trimestral (60€), semestral (120€) o anual (240€)** — múltiplo exacto. El cliente elige el periodo en la landing antes de pagar.
+
+**Un solo pago del cliente:** el checkout (modo suscripción) cobra en una única factura el fee del primer año + el primer periodo de tokens. El fee del año 1 va como line item one-time; la renovación anual del fee la crea el webhook como segunda suscripción anclada a +1 año (sin cobro inmediato). Dos suscripciones en Stripe, pero **una sola tarjeta y una sola autorización**.
+
+**Comisión del comercial:** se calcula **solo sobre el fee** (`Purchase.feeAmountCents`), nunca sobre los tokens ni sobre las renovaciones. La atribución manual usa la misma base.
+
+**Configurable por el administrador (OPERATOR)** en `/empresa/landing`:
+- Precio de renovación anual del fee
+- Descuento del primer año, en **importe (€) o en porcentaje (%)**
+- Precio de tokens (€/mes)
+- Qué periodos de tokens se ofrecen (checkboxes; al menos uno)
 
 ---
 
