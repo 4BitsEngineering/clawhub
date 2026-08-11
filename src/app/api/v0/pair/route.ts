@@ -4,6 +4,11 @@ import { z } from "zod";
 import { db } from "@/lib/db";
 import { generateInstanceToken } from "@/lib/tokens";
 import { recordActivity, systemActor } from "@/lib/activity";
+import {
+  defaultBaselineFiles,
+  DEFAULT_BASELINE_LABEL,
+  DEFAULT_BASELINE_DESCRIPTION,
+} from "@/lib/default-baseline";
 
 // Rate-limiting: ventana de 15 minutos, máximo 10 intentos FALLIDOS por IP.
 // Los clientes legítimos aciertan a la primera — no se ven afectados.
@@ -204,11 +209,33 @@ export async function POST(req: NextRequest) {
   // Baseline promovido de la firma (lo dejó el configurator en /api/v0/register
   // o un firm_admin desde la UI). El instalador lo descarga con su nuevo
   // instance_token vía GET /api/v0/baselines/[id] para provisionar el overlay.
-  const promoted = await db.firmBaseline.findFirst({
+  let promoted = await db.firmBaseline.findFirst({
     where: { firmId: pairingToken.firmId, isPromoted: true },
     orderBy: { version: "desc" },
     select: { id: true, version: true },
   });
+
+  // Firmas creadas por compra (sin configurator) no tienen baseline. Provisionar
+  // el baseline por defecto para que el instalador tenga qué provisionar. Solo
+  // si no hay ninguno promovido — el del configurator/firm_admin tiene prioridad.
+  // No bloqueante: si falla, devolvemos promoted=null y el pairing (identidad
+  // del PC) no se pierde; se puede promover un baseline y reintentar la descarga.
+  if (!promoted) {
+    try {
+      promoted = await provisionDefaultBaseline(pairingToken.firmId);
+      await recordActivity({
+        kind: "baseline.default_provisioned",
+        summary: `Baseline por defecto generado para "${pairingToken.firm.name}" al parear sin configurator`,
+        firmId: pairingToken.firmId,
+        instanceId: instance.id,
+        actor: systemActor("pair-endpoint"),
+        metadata: { baseline_id: promoted?.id ?? null },
+      });
+    } catch (err) {
+      // eslint-disable-next-line no-console
+      console.error("[pair] Error provisionando baseline por defecto:", err);
+    }
+  }
 
   return NextResponse.json({
     instance_id: instance.id,
@@ -218,4 +245,76 @@ export async function POST(req: NextRequest) {
     promoted_baseline_id: promoted?.id ?? null,
     promoted_baseline_version: promoted?.version ?? null,
   });
+}
+
+// Crea un FirmBaseline por defecto promovido para una firma que no tiene ninguno.
+// Replica el patrón de /api/v0/register: versión monotónica por firma, desmarcar
+// el promovido anterior (no habrá, pero por robustez) y crear files, todo en una
+// transacción; retry ante colisión de @@unique([firmId, version]) por si dos PCs
+// parean la misma firma a la vez.
+async function provisionDefaultBaseline(
+  firmId: string,
+): Promise<{ id: string; version: number } | null> {
+  const files = defaultBaselineFiles();
+  const totalBytes = files.reduce((s, f) => s + f.sizeBytes, 0);
+
+  for (let attempt = 0; attempt < 3; attempt++) {
+    // Reconsultar dentro del loop: si otro pair concurrente ya creó uno, salir.
+    const existing = await db.firmBaseline.findFirst({
+      where: { firmId, isPromoted: true },
+      orderBy: { version: "desc" },
+      select: { id: true, version: true },
+    });
+    if (existing) return existing;
+
+    const max = await db.firmBaseline.findFirst({
+      where: { firmId },
+      orderBy: { version: "desc" },
+      select: { version: true },
+    });
+    const nextVersion = (max?.version ?? 0) + 1;
+
+    try {
+      return await db.$transaction(async (tx) => {
+        await tx.firmBaseline.updateMany({
+          where: { firmId, isPromoted: true },
+          data: { isPromoted: false, promotedAt: null, promotedBy: null },
+        });
+        const created = await tx.firmBaseline.create({
+          data: {
+            firmId,
+            version: nextVersion,
+            label: DEFAULT_BASELINE_LABEL,
+            description: DEFAULT_BASELINE_DESCRIPTION,
+            fileCount: files.length,
+            totalBytes,
+            createdBy: "system-default",
+            isPromoted: true,
+            promotedAt: new Date(),
+            promotedBy: "system-default",
+          },
+          select: { id: true, version: true },
+        });
+        await tx.firmBaselineFile.createMany({
+          data: files.map((f) => ({
+            baselineId: created.id,
+            path: f.path,
+            category: f.category,
+            content: f.content,
+            sha256: f.sha256,
+            sizeBytes: f.sizeBytes,
+            isBinary: f.isBinary,
+          })),
+        });
+        return created;
+      });
+    } catch (err) {
+      const msg = (err as Error).message ?? "";
+      if (msg.includes("Unique constraint") && msg.includes("firmId_version")) {
+        continue; // carrera de versión — reintentar
+      }
+      throw err;
+    }
+  }
+  return null;
 }

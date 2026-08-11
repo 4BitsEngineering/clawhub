@@ -166,6 +166,8 @@ La venta tiene **dos conceptos**, ambos como suscripción de Stripe:
 9. La empresa aprueba el pago desde /empresa/commissions
 ```
 
+> **Paso 8b — Baseline por defecto** (change `default-firm-baseline`): una firma creada por compra no pasa por el configurator, así que no tiene paquete de configuración. Al parear el instalador (`/api/v0/pair`), si la firma no tiene baseline promovido, clawhub le genera uno **por defecto** (config AI-Office estándar, plantilla MiniMax/Ollama en `src/lib/default-baseline.ts`) para que el instalador provisione y el AI-Office arranque operativo. El cliente solo introduce el código de pairing; el proveedor de IA y su clave los provee el instalador/bridge. Si el configurator o el firm_admin ya dejaron un baseline, ése tiene prioridad. Nota de billing pendiente: todos los clientes comparten la clave de IA, así que limitar el consumo al plan de tokens es un cambio aparte.
+
 > **Paso 7b — IMPLEMENTADO** (change `post-purchase-onboarding`): tras crear el usuario FIRM_ADMIN, la Edge Function genera un `PairingToken` (código de activación XXXX-XXXX, válido 7 días) y envía un **email de bienvenida vía Resend** con el link de descarga del instalador `/api/v0/installer?pairing=<code>`. La **success page** (`/oferta/[slug]/success`) muestra también el botón de descarga y el código — doble vía de entrega. Si el webhook aún no procesó (carrera redirect-vs-webhook), la página muestra el fallback "recibirás un email". Pendiente: redeploy de la función + secrets de Resend (ver tasks del change).
 
 ---
