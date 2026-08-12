@@ -24,6 +24,23 @@ async function loginAction(formData: FormData) {
   await signIn("nodemailer", { email, redirectTo: "/" });
 }
 
+async function passwordLoginAction(formData: FormData) {
+  "use server";
+  const email = (formData.get("email") as string | null)?.trim();
+  const password = (formData.get("password") as string | null) ?? "";
+  if (!email || !password) redirect("/login?error=cred");
+  try {
+    await signIn("credentials", { email, password, redirectTo: "/" });
+  } catch (err) {
+    // signIn lanza NEXT_REDIRECT en éxito — re-lanzar; el resto es credencial
+    // inválida → error genérico (no revelar si el email existe).
+    if ((err as { digest?: string })?.digest?.startsWith("NEXT_REDIRECT")) {
+      throw err;
+    }
+    redirect("/login?error=cred");
+  }
+}
+
 async function devLoginAction(formData: FormData) {
   "use server";
   if (process.env.DEV_AUTH_ENABLED !== "true") return;
@@ -94,10 +111,11 @@ async function devLoginAction(formData: FormData) {
 export default async function LoginPage({
   searchParams,
 }: {
-  searchParams: Promise<{ sent?: string }>;
+  searchParams: Promise<{ sent?: string; error?: string }>;
 }) {
   const params = await searchParams;
   const sent = params?.sent === "1";
+  const credError = params?.error === "cred";
   const devEnabled = process.env.DEV_AUTH_ENABLED === "true";
 
   return (
@@ -118,7 +136,7 @@ export default async function LoginPage({
           <CardDescription>
             {devEnabled
               ? "Fase de validación: entra directo con un rol o usa tu email."
-              : "Introduce tu email y te enviaremos un enlace de acceso."}
+              : "Entra con tu contraseña o pide un enlace de acceso por email."}
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-6">
@@ -160,7 +178,48 @@ export default async function LoginPage({
             </div>
           ) : null}
 
-          <details className="border-t pt-3" open={!devEnabled}>
+          {/* Login con contraseña (solo usuarios con contraseña asignada) */}
+          <form action={passwordLoginAction} className="space-y-3">
+            <div className="space-y-2">
+              <Label htmlFor="cred-email">Email</Label>
+              <Input
+                id="cred-email"
+                name="email"
+                type="email"
+                required
+                autoComplete="email"
+                placeholder="tu@email.com"
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="cred-password">Contraseña</Label>
+              <Input
+                id="cred-password"
+                name="password"
+                type="password"
+                required
+                autoComplete="current-password"
+                placeholder="••••••••"
+              />
+            </div>
+            {credError && (
+              <p className="text-sm text-red-600 dark:text-red-400">
+                Email o contraseña incorrectos.
+              </p>
+            )}
+            <Button
+              type="submit"
+              className="w-full"
+              style={{
+                backgroundColor: "var(--brand)",
+                color: "var(--brand-foreground)",
+              }}
+            >
+              Entrar →
+            </Button>
+          </form>
+
+          <details className="border-t pt-3">
             <summary className="cursor-pointer text-xs text-muted-foreground">
               Login por email (magic link)
             </summary>

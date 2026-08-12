@@ -1,8 +1,10 @@
 import NextAuth from "next-auth";
 import Nodemailer from "next-auth/providers/nodemailer";
+import Credentials from "next-auth/providers/credentials";
 import { PrismaAdapter } from "@auth/prisma-adapter";
 import { db } from "@/lib/db";
 import { sendEmail } from "@/lib/mailer";
+import { verifyPassword } from "@/lib/password";
 
 declare module "next-auth" {
   interface Session {
@@ -19,8 +21,34 @@ declare module "next-auth" {
 
 export const { handlers, auth, signIn, signOut } = NextAuth({
   adapter: PrismaAdapter(db),
-  session: { strategy: "database" },
+  // JWT en vez de database: requisito del provider Credentials (no crea
+  // sesiones de BD). El adapter sigue usándose para usuarios y verification
+  // tokens del magic link. maxAge equivalente a las sesiones anteriores.
+  session: { strategy: "jwt", maxAge: 30 * 24 * 60 * 60 },
   providers: [
+    // Login con contraseña (opt-in por usuario: solo si tiene passwordHash).
+    // Fallo genérico en todos los casos — no revela si el email existe.
+    Credentials({
+      credentials: {
+        email: { label: "Email", type: "email" },
+        password: { label: "Contraseña", type: "password" },
+      },
+      async authorize(credentials) {
+        const email = String(credentials?.email ?? "").trim().toLowerCase();
+        const password = String(credentials?.password ?? "");
+        if (!email || !password) return null;
+        const user = await db.user.findUnique({ where: { email } });
+        if (!user?.passwordHash) return null;
+        if (!verifyPassword(password, user.passwordHash)) return null;
+        return {
+          id: user.id,
+          email: user.email,
+          name: user.name,
+          role: user.role,
+          firmId: user.firmId,
+        };
+      },
+    }),
     // El transporte SMTP de Nodemailer nunca se usa: sendVerificationRequest
     // está sobrescrito para enviar vía Resend (src/lib/mailer.ts). Se conserva
     // el provider porque su id ("nodemailer") ya está referenciado en signIn().
@@ -95,13 +123,27 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
       }
       return true;
     },
-    session({ session, user }) {
+    // Con estrategia JWT: en el login (magic link o credenciales) copiamos
+    // id/role/firmId del usuario al token; la sesión los lee del token.
+    jwt({ token, user }) {
+      if (user) {
+        token.id = user.id;
+        // @ts-expect-error — role/firmId vienen del User de Prisma
+        token.role = user.role;
+        // @ts-expect-error — role/firmId vienen del User de Prisma
+        token.firmId = user.firmId ?? null;
+      }
+      return token;
+    },
+    session({ session, token }) {
       if (session.user) {
-        session.user.id = user.id;
-        // @ts-expect-error — role comes from User table (Prisma type)
-        session.user.role = user.role;
-        // @ts-expect-error — firmId comes from User table (Prisma type)
-        session.user.firmId = user.firmId;
+        session.user.id = token.id as string;
+        session.user.role = token.role as
+          | "OPERATOR"
+          | "FIRM_ADMIN"
+          | "EMPRESA"
+          | "COMERCIAL";
+        session.user.firmId = (token.firmId as string | null) ?? null;
       }
       return session;
     },

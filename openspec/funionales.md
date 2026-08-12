@@ -13,10 +13,12 @@ El ORM es Prisma v7 con adapter-pg. El schema `clawhub` está expuesto en la API
 
 ## Login
 
-**Implementado con NextAuth v5 (Auth.js)** — change `production-auth-email` aplicado.
+**Implementado con NextAuth v5 (Auth.js)** — changes `production-auth-email` y `password-login` aplicados.
 
 - En **desarrollo**: bypass con botones "Entrar como Operador / Empresa / Comercial" en `/login` (variable `DEV_AUTH_ENABLED=true`). Sin `RESEND_API_KEY`, el magic link se loguea en consola.
-- En **producción**: magic link enviado por **email real vía Resend** (`sendVerificationRequest` usa `sendEmail` de `mailer.ts`). Solo puede entrar un email que ya exista en la tabla `User` — el callback `signIn` bloquea la solicitud si no está dado de alta (sin self-signup; no se envía email a desconocidos).
+- En **producción**, dos vías:
+  - **Email + contraseña** (change `password-login`): solo usuarios con contraseña asignada (`User.passwordHash`, scrypt con sal; se asigna por script — sin UI de gestión de momento). Error genérico ante fallo (no revela si el email existe). Sesión JWT (30 días) con rol/firma en el token.
+  - **Magic link** vía Resend, para cualquier usuario dado de alta. Solo puede entrar un email que ya exista en la tabla `User` — el callback `signIn` bloquea la solicitud si no está dado de alta (sin self-signup; no se envía email a desconocidos).
 - **Invitaciones** (`/invite/[token]`): al aceptar ya no hay auto-login con cookie dev — se dispara el magic link real al email invitado, mismo flujo con o sin `DEV_AUTH_ENABLED`.
 - Remitente canónico unificado: `AI-Office <info@iaofi.com>` (`RESEND_FROM`).
 - Roles soportados: `OPERATOR`, `EMPRESA`, `COMERCIAL`, `FIRM_ADMIN`

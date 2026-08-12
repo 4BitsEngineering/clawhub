@@ -21,6 +21,9 @@ model User {
   emailVerified DateTime?
   name          String?
   image         String?
+  // Login con contraseña (opt-in): hash scrypt (src/lib/password.ts). Los
+  // usuarios sin hash solo pueden entrar por magic link.
+  passwordHash  String?
   role          UserRole  @default(FIRM_ADMIN)
   firmId        String?
   firm          Firm?     @relation(fields: [firmId], references: [id], onDelete: SetNull)
