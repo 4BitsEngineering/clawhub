@@ -413,7 +413,7 @@ async function sendWelcomeEmail(opts: {
 
   const from =
     Deno.env.get("RESEND_FROM") ?? "AI-Office <info@iaofi.com>";
-  const appUrl = Deno.env.get("APP_URL") ?? "https://clawhub-three.vercel.app";
+  const appUrl = Deno.env.get("APP_URL") ?? "https://ia-suite-chi.vercel.app";
   const installerUrl = `${appUrl}/api/v0/installer?pairing=${opts.code}`;
   const firstName = opts.name?.split(" ")[0] ?? null;
 

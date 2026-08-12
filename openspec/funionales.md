@@ -66,11 +66,13 @@ Acceso: roles `EMPRESA` y `OPERATOR`
 - Filtros por: comercial, estado del prospect
 - Columnas: Empresa, Contacto, Teléfono, Estado, Comercial, Fecha
 
-#### Comisiones `/empresa/commissions`
-- KPIs: pendiente de pagar (ámbar), ya pagado (verde), total
-- Tabla completa con: comercial, comprador, importe venta, comisión, porcentaje, estado, fechas
-- Acción "Marcar pagada" por fila
-- Acción "Marcar todas pagadas" en bulk
+#### Pagos de comisiones `/empresa/commissions` — change `commission-payment-management`
+- Pago por **transferencia bancaria manual** (sin Stripe), gestionado por EMPRESA y OPERATOR
+- Estados: **Pendiente** → **Transferida** (fecha + referencia opcional) → **Incidencia** (nota obligatoria: devolución, IBAN erróneo…), con vueltas atrás (reintentar / deshacer marcado erróneo)
+- KPIs por estado (ámbar/verde/rojo) + **filtro por estado**
+- Cada fila muestra el **IBAN del comercial** (o "sin IBAN") para copiarlo al hacer la transferencia
+- Acciones por fila según estado + bulk "Marcar transferidas"
+- El comercial lo ve reflejado en `/sales/commissions` (solo lectura; una incidencia cuenta como pendiente de cobro y muestra su nota)
 - **Atribución manual (solo OPERATOR)** — change `manual-commission-attribution`:
   - Sección "Compras sin atribuir": lista las compras `COMPLETED` sin comisión
   - Selector de comercial por fila → crea la comisión con la tarifa vigente del comercial (misma fórmula que el webhook), estado PENDING, con traza en `notes`
@@ -111,9 +113,14 @@ Acceso: rol `COMERCIAL`
 - Cada envío genera un `trackingToken` único por prospect
 
 #### Comisiones `/sales/commissions`
-- KPIs: pendiente de cobro (ámbar), ya cobrado (verde), total acumulado
-- Historial de comisiones propias: comprador, importe venta, comisión, porcentaje, estado, fechas
-- Solo lectura — la empresa marca el pago
+- KPIs: pendiente de cobro (ámbar; incluye incidencias), transferido (verde), total acumulado
+- Historial de comisiones propias: comprador, importe venta, comisión, porcentaje, estado (Pendiente/Transferida/Incidencia con su nota), fechas
+- Solo lectura — la empresa gestiona el pago
+- Aviso "añade tu IBAN en tu perfil" si tiene comisiones sin IBAN configurado
+
+#### Perfil `/sales/profile` — change `commission-payment-management`
+- Datos del comercial (nombre, email, territorio, % comisión — solo lectura)
+- **IBAN autoservicio**: el comercial introduce/edita su cuenta de cobro (validación de formato, guardado normalizado) + **titular de la cuenta** (puede ser una sociedad, no necesariamente el comercial); EMPRESA/OPERATOR lo ven en el panel de pagos pero no lo editan
 
 ---
 
@@ -184,7 +191,7 @@ La venta tiene **dos conceptos**, ambos como suscripción de Stripe:
 | SMS | Twilio (raw fetch, sin SDK) | ✓ |
 | Pagos | Stripe v22, API 2026-06-24.dahlia | ✓ |
 | Webhook Stripe | Supabase Edge Function (Deno) | ✓ desplegado |
-| Hosting app | Vercel (clawhub-three.vercel.app) | ✓ |
+| Hosting app | Vercel (ia-suite-chi.vercel.app) | ✓ |
 | Hosting BD | Supabase (sbtpydttrswiljnskrsq) | ✓ |
 
 ---

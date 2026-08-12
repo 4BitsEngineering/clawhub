@@ -54,7 +54,7 @@ AUTH_URL="http://localhost:3001"   # app corre en 3001 (3000 → AI-Office)
 AUTH_TRUST_HOST="true"
 DEV_AUTH_ENABLED="true"           # quitar en producción
 
-NEXT_PUBLIC_APP_URL=https://clawhub-three.vercel.app
+NEXT_PUBLIC_APP_URL=https://ia-suite-chi.vercel.app
 
 RESEND_API_KEY=re_xxxx
 RESEND_FROM=AI-Office <info@iaofi.com>
@@ -122,7 +122,7 @@ stripe listen --forward-to localhost:54321/functions/v1/stripe-webhook
 
 | Proyecto | URL local | URL producción |
 |---|---|---|
-| clawhub | http://localhost:3001 | https://clawhub-three.vercel.app |
+| clawhub | http://localhost:3001 | https://ia-suite-chi.vercel.app |
 | AI-Office | http://localhost:3000 | — |
 | Supabase | — | https://sbtpydttrswiljnskrsq.supabase.co |
 | Webhook URL | localhost:54321/functions/v1/stripe-webhook | https://sbtpydttrswiljnskrsq.supabase.co/functions/v1/stripe-webhook |

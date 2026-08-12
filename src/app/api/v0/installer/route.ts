@@ -5,7 +5,7 @@
  * bundle INSTALLER más reciente del canal pedido (default: "stable").
  *
  * Diseñado para que el firm_admin pueda pasar al trabajador un link estable
- * tipo "https://clawhub-three.vercel.app/api/v0/installer?pairing=ABCD-EFGH"
+ * tipo "https://ia-suite-chi.vercel.app/api/v0/installer?pairing=ABCD-EFGH"
  * sin tener que conocer la URL real del .exe (que puede vivir en GitHub
  * Releases, Drive, R2, etc.).
  *

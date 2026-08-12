@@ -19,13 +19,18 @@ export function EmpresaShell({
         style={{ backgroundColor: "#2e1065" }}
       >
         <div className="container-page flex items-center justify-between h-14">
-          <div className="flex items-center gap-4">
+          <div className="flex items-center">
             <Link
               href="/empresa"
               className="text-sm font-semibold tracking-tight text-white hover:text-violet-100 transition-colors"
             >
               AI-Office · Empresa
             </Link>
+            {/* Separador entre logo y navegación */}
+            <span
+              aria-hidden
+              className="hidden sm:block mx-6 h-5 w-px bg-white/15"
+            />
             <nav className="hidden sm:flex items-center gap-1">
               <Link
                 href="/empresa"

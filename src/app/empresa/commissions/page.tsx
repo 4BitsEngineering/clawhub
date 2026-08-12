@@ -1,7 +1,9 @@
+import Link from "next/link";
 import { revalidatePath } from "next/cache";
 import { requireEmpresa, requireOperator } from "@/lib/session";
 import { EmpresaShell } from "@/components/empresa-shell";
 import { db } from "@/lib/db";
+import type { CommissionStatus } from "@/generated/prisma/client";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -25,6 +27,12 @@ export const dynamic = "force-dynamic";
 // manual (permite distinguirlas de las automáticas y habilitar el reverso).
 const MANUAL_TAG = "Atribución manual";
 
+const STATUS_LABEL: Record<CommissionStatus, string> = {
+  PENDING: "Pendiente",
+  TRANSFERRED: "Transferida",
+  INCIDENT: "Incidencia",
+};
+
 function fmt(cents: number) {
   return (cents / 100).toLocaleString("es-ES", {
     style: "currency",
@@ -32,27 +40,69 @@ function fmt(cents: number) {
   });
 }
 
-export default async function EmpresaCommissionsPage() {
+export default async function EmpresaCommissionsPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ estado?: string }>;
+}) {
   const session = await requireEmpresa();
+  const { estado } = await searchParams;
+  const statusFilter: CommissionStatus | null =
+    estado === "PENDING" || estado === "TRANSFERRED" || estado === "INCIDENT"
+      ? estado
+      : null;
 
-  async function markPaidAction(formData: FormData) {
+  // ── Transiciones del ciclo de pago (transferencia bancaria manual) ────────
+  // Cada action revalida rol y valida la transición desde el estado actual.
+
+  async function markTransferredAction(formData: FormData) {
     "use server";
     await requireEmpresa();
     const id = ((formData.get("id") as string) ?? "").trim();
+    const ref = ((formData.get("ref") as string) ?? "").trim() || null;
     if (!id) return;
-    await db.commission.update({
-      where: { id },
-      data: { status: "PAID", paidAt: new Date() },
+    // Permitido desde PENDING (pago normal) e INCIDENT (resuelta con pago)
+    await db.commission.updateMany({
+      where: { id, status: { in: ["PENDING", "INCIDENT"] } },
+      data: { status: "TRANSFERRED", paidAt: new Date(), paymentRef: ref },
     });
     revalidatePath("/empresa/commissions");
   }
 
-  async function markAllPaidAction() {
+  async function markIncidentAction(formData: FormData) {
+    "use server";
+    await requireEmpresa();
+    const id = ((formData.get("id") as string) ?? "").trim();
+    const note = ((formData.get("note") as string) ?? "").trim();
+    if (!id || !note) return; // nota obligatoria
+    // Permitido desde PENDING (no se pudo pagar) y TRANSFERRED (devolución)
+    await db.commission.updateMany({
+      where: { id, status: { in: ["PENDING", "TRANSFERRED"] } },
+      data: { status: "INCIDENT", paymentNote: note },
+    });
+    revalidatePath("/empresa/commissions");
+  }
+
+  async function backToPendingAction(formData: FormData) {
+    "use server";
+    await requireEmpresa();
+    const id = ((formData.get("id") as string) ?? "").trim();
+    if (!id) return;
+    // Reintento tras incidencia o deshacer un marcado erróneo. La nota se
+    // conserva como historial.
+    await db.commission.updateMany({
+      where: { id, status: { in: ["INCIDENT", "TRANSFERRED"] } },
+      data: { status: "PENDING", paidAt: null },
+    });
+    revalidatePath("/empresa/commissions");
+  }
+
+  async function markAllTransferredAction() {
     "use server";
     await requireEmpresa();
     await db.commission.updateMany({
       where: { status: "PENDING" },
-      data: { status: "PAID", paidAt: new Date() },
+      data: { status: "TRANSFERRED", paidAt: new Date() },
     });
     revalidatePath("/empresa/commissions");
   }
@@ -84,7 +134,6 @@ export default async function EmpresaCommissionsPage() {
       }),
     ]);
 
-    // Guardas: compra completada, sin comisión previa, comercial válido.
     if (!purchase || !rep) return;
     if (purchase.status !== "COMPLETED") return;
     if (purchase.commission) return;
@@ -105,15 +154,13 @@ export default async function EmpresaCommissionsPage() {
         },
       });
     } catch (err) {
-      // Colisión con el @unique de purchaseId (doble submit / carrera) → no-op.
       const msg = (err as Error).message ?? "";
       if (!msg.includes("Unique constraint")) throw err;
     }
     revalidatePath("/empresa/commissions");
   }
 
-  // Reverso de una atribución manual mientras esté PENDING. Nunca borra
-  // comisiones automáticas ni comisiones ya pagadas.
+  // Reverso de una atribución manual: solo mientras esté PENDING.
   async function undoAttributionAction(formData: FormData) {
     "use server";
     await requireOperator();
@@ -135,6 +182,7 @@ export default async function EmpresaCommissionsPage() {
   const isOperator = session.user.role === "OPERATOR";
 
   const commissions = await db.commission.findMany({
+    where: statusFilter ? { status: statusFilter } : undefined,
     include: {
       salesRep: {
         include: { user: { select: { name: true, email: true } } },
@@ -151,11 +199,23 @@ export default async function EmpresaCommissionsPage() {
     },
     orderBy: { createdAt: "desc" },
   });
-  // La consulta incluye `notes` por defecto (no hay select), así que basta con
-  // leerlo para saber si una comisión es de origen manual.
 
-  // Atribución manual (solo OPERATOR): compras completadas sin comisión + los
-  // comerciales activos a los que asignarlas. Solo se consulta si es operador.
+  // KPIs sobre el total (sin filtro), para que no cambien al filtrar
+  const all = statusFilter
+    ? await db.commission.findMany({ select: { status: true, amountCents: true } })
+    : commissions.map((c) => ({ status: c.status, amountCents: c.amountCents }));
+
+  const sumBy = (s: CommissionStatus) =>
+    all.filter((c) => c.status === s).reduce((t, c) => t + c.amountCents, 0);
+  const countBy = (s: CommissionStatus) =>
+    all.filter((c) => c.status === s).length;
+
+  const pendingCents = sumBy("PENDING");
+  const transferredCents = sumBy("TRANSFERRED");
+  const incidentCents = sumBy("INCIDENT");
+  const pendingCount = countBy("PENDING");
+
+  // Atribución manual (solo OPERATOR)
   const [unattributed, activeReps] = isOperator
     ? await Promise.all([
         db.purchase.findMany({
@@ -163,6 +223,7 @@ export default async function EmpresaCommissionsPage() {
           select: {
             id: true,
             amountCents: true,
+            feeAmountCents: true,
             completedAt: true,
             buyerName: true,
             buyerEmail: true,
@@ -181,30 +242,42 @@ export default async function EmpresaCommissionsPage() {
       ])
     : [[], []];
 
-  const pendingCents = commissions
-    .filter((c) => c.status === "PENDING")
-    .reduce((s, c) => s + c.amountCents, 0);
-  const paidCents = commissions
-    .filter((c) => c.status === "PAID")
-    .reduce((s, c) => s + c.amountCents, 0);
-  const pendingCount = commissions.filter((c) => c.status === "PENDING").length;
+  const filterChip = (value: string | null, label: string, count?: number) => {
+    const active = statusFilter === value || (!statusFilter && value === null);
+    const href = value ? `/empresa/commissions?estado=${value}` : "/empresa/commissions";
+    return (
+      <Link
+        key={label}
+        href={href}
+        className={
+          active
+            ? "px-3 py-1 rounded-full text-xs font-semibold bg-violet-600 text-white"
+            : "px-3 py-1 rounded-full text-xs border border-border text-muted-foreground hover:bg-muted/40 transition-colors"
+        }
+      >
+        {label}
+        {count !== undefined ? ` (${count})` : ""}
+      </Link>
+    );
+  };
 
   return (
-    <EmpresaShell email={session.user.email} isOperator={session.user.role === "OPERATOR"}>
+    <EmpresaShell email={session.user.email} isOperator={isOperator}>
       <div className="space-y-8">
         <div className="flex items-center justify-between gap-4 flex-wrap">
           <div>
             <h1 className="font-display text-2xl font-semibold tracking-tight">
-              Comisiones
+              Pagos de comisiones
             </h1>
             <p className="text-sm text-muted-foreground mt-1">
-              Gestiona y liquida las comisiones de tus comerciales.
+              Transferencias bancarias a tus comerciales: qué está pendiente, a
+              qué cuenta, y su estado.
             </p>
           </div>
           {pendingCount > 0 && (
-            <form action={markAllPaidAction}>
+            <form action={markAllTransferredAction}>
               <Button type="submit" variant="outline" size="sm">
-                Marcar todas como pagadas ({pendingCount})
+                Marcar transferidas ({pendingCount})
               </Button>
             </form>
           )}
@@ -214,16 +287,25 @@ export default async function EmpresaCommissionsPage() {
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
           {[
             {
-              label: "Comisiones pendientes",
+              label: "Pendiente de transferir",
               value: fmt(pendingCents),
-              color: pendingCents > 0 ? "text-amber-600 dark:text-amber-400" : undefined,
+              color:
+                pendingCents > 0 ? "text-amber-600 dark:text-amber-400" : undefined,
             },
             {
-              label: "Comisiones pagadas",
-              value: fmt(paidCents),
-              color: paidCents > 0 ? "text-green-600 dark:text-green-400" : undefined,
+              label: "Transferido",
+              value: fmt(transferredCents),
+              color:
+                transferredCents > 0
+                  ? "text-green-600 dark:text-green-400"
+                  : undefined,
             },
-            { label: "Total comisiones", value: commissions.length.toString() },
+            {
+              label: "En incidencia",
+              value: fmt(incidentCents),
+              color:
+                incidentCents > 0 ? "text-red-600 dark:text-red-400" : undefined,
+            },
           ].map((kpi) => (
             <div key={kpi.label} className="card-paper p-5 space-y-1.5">
               <div className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground">
@@ -267,10 +349,7 @@ export default async function EmpresaCommissionsPage() {
                   </TableHeader>
                   <TableBody>
                     {unattributed.map((p) => (
-                      <TableRow
-                        key={p.id}
-                        className="hover:bg-muted/20 transition-colors"
-                      >
+                      <TableRow key={p.id} className="hover:bg-muted/20 transition-colors">
                         <TableCell>
                           <div className="font-medium">{p.buyerName ?? "—"}</div>
                           {p.buyerEmail && (
@@ -280,7 +359,13 @@ export default async function EmpresaCommissionsPage() {
                           )}
                         </TableCell>
                         <TableCell className="tabular-nums font-medium">
-                          {fmt(p.amountCents)}
+                          {fmt(p.feeAmountCents ?? p.amountCents)}
+                          {p.feeAmountCents != null &&
+                            p.feeAmountCents !== p.amountCents && (
+                              <div className="text-[11px] text-muted-foreground">
+                                fee (total {fmt(p.amountCents)})
+                              </div>
+                            )}
                         </TableCell>
                         <TableCell className="text-muted-foreground text-sm whitespace-nowrap">
                           {p.completedAt
@@ -329,16 +414,28 @@ export default async function EmpresaCommissionsPage() {
           </Card>
         )}
 
+        {/* Filtro por estado */}
+        <div className="flex items-center gap-2 flex-wrap">
+          {filterChip(null, "Todas", all.length)}
+          {filterChip("PENDING", "Pendientes", countBy("PENDING"))}
+          {filterChip("TRANSFERRED", "Transferidas", countBy("TRANSFERRED"))}
+          {filterChip("INCIDENT", "Incidencias", countBy("INCIDENT"))}
+        </div>
+
         {/* Tabla */}
         {commissions.length === 0 ? (
           <p className="text-sm text-muted-foreground">
-            Sin comisiones todavía. Se generan automáticamente al completarse
-            un pago con atribución a un comercial.
+            {statusFilter
+              ? `Sin comisiones en estado "${STATUS_LABEL[statusFilter]}".`
+              : "Sin comisiones todavía. Se generan automáticamente al completarse un pago con atribución a un comercial."}
           </p>
         ) : (
           <Card className="card-paper p-0 overflow-hidden">
             <CardHeader className="px-6 py-4 border-b">
-              <CardTitle className="text-base">Historial</CardTitle>
+              <CardTitle className="text-base">
+                {statusFilter ? STATUS_LABEL[statusFilter] : "Historial"} (
+                {commissions.length})
+              </CardTitle>
             </CardHeader>
             <CardContent className="p-0">
               <div className="overflow-x-auto">
@@ -346,15 +443,12 @@ export default async function EmpresaCommissionsPage() {
                   <TableHeader>
                     <TableRow className="bg-muted/30 hover:bg-muted/30">
                       {[
-                        "Comercial",
+                        "Comercial / IBAN",
                         "Comprador",
-                        "Venta",
                         "Comisión",
-                        "%",
                         "Estado",
-                        "Fecha venta",
-                        "Pagada el",
-                        "Acción",
+                        "Transferida",
+                        "Acciones",
                       ].map((h) => (
                         <TableHead
                           key={h}
@@ -367,100 +461,209 @@ export default async function EmpresaCommissionsPage() {
                   </TableHeader>
                   <TableBody>
                     {commissions.map((c) => (
-                      <TableRow
-                        key={c.id}
-                        className="hover:bg-muted/20 transition-colors"
-                      >
+                      <TableRow key={c.id} className="hover:bg-muted/20 transition-colors align-top">
                         <TableCell>
                           <div className="font-medium">
                             {c.salesRep.user.name ?? c.salesRep.user.email}
                           </div>
-                          {c.salesRep.user.name && (
-                            <div className="text-xs text-muted-foreground">
-                              {c.salesRep.user.email}
+                          {c.salesRep.iban ? (
+                            <>
+                              <div className="text-xs font-mono text-muted-foreground select-all">
+                                {c.salesRep.iban}
+                              </div>
+                              {c.salesRep.ibanHolder && (
+                                <div className="text-[11px] text-muted-foreground">
+                                  Titular: {c.salesRep.ibanHolder}
+                                </div>
+                              )}
+                            </>
+                          ) : (
+                            <div className="text-xs text-red-500/80">
+                              sin IBAN
                             </div>
                           )}
                         </TableCell>
                         <TableCell>
                           <div className="font-medium">
-                            {c.purchase.buyerName ?? "—"}
+                            {c.purchase.buyerName ?? c.purchase.buyerEmail ?? "—"}
                           </div>
-                          {c.purchase.buyerEmail && (
-                            <div className="text-xs text-muted-foreground">
-                              {c.purchase.buyerEmail}
-                            </div>
-                          )}
-                        </TableCell>
-                        <TableCell className="tabular-nums font-medium">
-                          {fmt(c.purchase.amountCents)}
+                          <div className="text-xs text-muted-foreground tabular-nums">
+                            venta {fmt(c.purchase.amountCents)} ·{" "}
+                            {c.purchase.completedAt
+                              ? c.purchase.completedAt.toLocaleDateString("es-ES")
+                              : "—"}
+                          </div>
                         </TableCell>
                         <TableCell
                           className={`tabular-nums font-semibold ${
-                            c.status === "PENDING"
-                              ? "text-amber-600 dark:text-amber-400"
-                              : "text-green-600 dark:text-green-400"
+                            c.status === "TRANSFERRED"
+                              ? "text-green-600 dark:text-green-400"
+                              : c.status === "INCIDENT"
+                                ? "text-red-600 dark:text-red-400"
+                                : "text-amber-600 dark:text-amber-400"
                           }`}
                         >
                           {fmt(c.amountCents)}
-                        </TableCell>
-                        <TableCell className="tabular-nums text-muted-foreground">
-                          {Math.round(c.rate * 100)}%
+                          <div className="text-[11px] font-normal text-muted-foreground">
+                            {Math.round(c.rate * 100)}%
+                          </div>
                         </TableCell>
                         <TableCell>
                           <Badge
                             variant={
-                              c.status === "PAID" ? "default" : "secondary"
+                              c.status === "TRANSFERRED"
+                                ? "default"
+                                : c.status === "INCIDENT"
+                                  ? "destructive"
+                                  : "secondary"
                             }
                             className="text-[11px]"
                           >
-                            {c.status === "PAID" ? "Pagada" : "Pendiente"}
+                            {STATUS_LABEL[c.status]}
                           </Badge>
-                        </TableCell>
-                        <TableCell className="text-muted-foreground text-sm whitespace-nowrap">
-                          {c.purchase.completedAt
-                            ? c.purchase.completedAt.toLocaleDateString("es-ES")
-                            : "—"}
+                          {c.paymentNote && (
+                            <div className="text-[11px] text-red-500/90 mt-1 max-w-[180px]">
+                              {c.paymentNote}
+                            </div>
+                          )}
+                          {c.notes?.startsWith(MANUAL_TAG) && (
+                            <div className="text-[10px] text-muted-foreground mt-0.5">
+                              atribución manual
+                            </div>
+                          )}
                         </TableCell>
                         <TableCell className="text-muted-foreground text-sm whitespace-nowrap">
                           {c.paidAt ? c.paidAt.toLocaleDateString("es-ES") : "—"}
+                          {c.paymentRef && (
+                            <div className="text-[11px] font-mono">
+                              ref: {c.paymentRef}
+                            </div>
+                          )}
                         </TableCell>
                         <TableCell>
-                          {c.status === "PENDING" ? (
-                            <div className="flex items-center gap-2">
-                              <form action={markPaidAction}>
-                                <input type="hidden" name="id" value={c.id} />
-                                <Button
-                                  type="submit"
-                                  variant="outline"
-                                  size="sm"
+                          <div className="flex flex-col gap-1.5 min-w-[220px]">
+                            {c.status === "PENDING" && (
+                              <>
+                                <form
+                                  action={markTransferredAction}
+                                  className="flex items-center gap-1.5"
                                 >
-                                  Marcar pagada
-                                </Button>
-                              </form>
-                              {/* Deshacer solo atribuciones manuales (OPERATOR) */}
-                              {isOperator && c.notes?.startsWith(MANUAL_TAG) && (
-                                <form action={undoAttributionAction}>
+                                  <input type="hidden" name="id" value={c.id} />
                                   <input
-                                    type="hidden"
-                                    name="commissionId"
-                                    value={c.id}
+                                    name="ref"
+                                    placeholder="Ref. (opcional)"
+                                    className="h-8 w-28 rounded-md border border-border bg-background px-2 text-xs"
+                                  />
+                                  <Button type="submit" size="sm" variant="outline">
+                                    ✓ Transferida
+                                  </Button>
+                                </form>
+                                <div className="flex items-center gap-1.5">
+                                  <form
+                                    action={markIncidentAction}
+                                    className="flex items-center gap-1.5"
+                                  >
+                                    <input type="hidden" name="id" value={c.id} />
+                                    <input
+                                      name="note"
+                                      required
+                                      placeholder="Motivo incidencia…"
+                                      className="h-8 w-28 rounded-md border border-border bg-background px-2 text-xs"
+                                    />
+                                    <Button
+                                      type="submit"
+                                      size="sm"
+                                      variant="ghost"
+                                      className="text-red-500"
+                                    >
+                                      ⚠ Incidencia
+                                    </Button>
+                                  </form>
+                                  {isOperator && c.notes?.startsWith(MANUAL_TAG) && (
+                                    <form action={undoAttributionAction}>
+                                      <input
+                                        type="hidden"
+                                        name="commissionId"
+                                        value={c.id}
+                                      />
+                                      <Button
+                                        type="submit"
+                                        variant="ghost"
+                                        size="sm"
+                                        className="text-muted-foreground"
+                                      >
+                                        Deshacer
+                                      </Button>
+                                    </form>
+                                  )}
+                                </div>
+                              </>
+                            )}
+                            {c.status === "INCIDENT" && (
+                              <>
+                                <form
+                                  action={markTransferredAction}
+                                  className="flex items-center gap-1.5"
+                                >
+                                  <input type="hidden" name="id" value={c.id} />
+                                  <input
+                                    name="ref"
+                                    placeholder="Ref. (opcional)"
+                                    className="h-8 w-28 rounded-md border border-border bg-background px-2 text-xs"
+                                  />
+                                  <Button type="submit" size="sm" variant="outline">
+                                    ✓ Transferida
+                                  </Button>
+                                </form>
+                                <form action={backToPendingAction}>
+                                  <input type="hidden" name="id" value={c.id} />
+                                  <Button
+                                    type="submit"
+                                    size="sm"
+                                    variant="ghost"
+                                    className="text-muted-foreground"
+                                  >
+                                    ↩ Volver a pendiente
+                                  </Button>
+                                </form>
+                              </>
+                            )}
+                            {c.status === "TRANSFERRED" && (
+                              <>
+                                <form
+                                  action={markIncidentAction}
+                                  className="flex items-center gap-1.5"
+                                >
+                                  <input type="hidden" name="id" value={c.id} />
+                                  <input
+                                    name="note"
+                                    required
+                                    placeholder="Motivo (devolución…)"
+                                    className="h-8 w-28 rounded-md border border-border bg-background px-2 text-xs"
                                   />
                                   <Button
                                     type="submit"
-                                    variant="ghost"
                                     size="sm"
-                                    className="text-muted-foreground"
+                                    variant="ghost"
+                                    className="text-red-500"
                                   >
-                                    Deshacer
+                                    ⚠ Incidencia
                                   </Button>
                                 </form>
-                              )}
-                            </div>
-                          ) : (
-                            <span className="text-xs text-muted-foreground">
-                              ✓
-                            </span>
-                          )}
+                                <form action={backToPendingAction}>
+                                  <input type="hidden" name="id" value={c.id} />
+                                  <Button
+                                    type="submit"
+                                    size="sm"
+                                    variant="ghost"
+                                    className="text-muted-foreground"
+                                  >
+                                    ↩ Volver a pendiente
+                                  </Button>
+                                </form>
+                              </>
+                            )}
+                          </div>
                         </TableCell>
                       </TableRow>
                     ))}

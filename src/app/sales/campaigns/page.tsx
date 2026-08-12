@@ -85,7 +85,7 @@ export default async function SalesCampaignsPage() {
                           }}
                           size="sm"
                         >
-                          Enviar →
+                          Ver y enviar →
                         </Button>
                       </Link>
                     </div>

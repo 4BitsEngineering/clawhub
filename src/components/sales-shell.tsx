@@ -19,7 +19,7 @@ export function SalesShell({
         }}
       >
         <div className="container-page flex items-center justify-between h-14">
-          <div className="flex items-center gap-5">
+          <div className="flex items-center">
             <Link
               href="/sales"
               className="text-sm font-bold tracking-tight text-white hover:text-emerald-100 transition-colors"
@@ -29,6 +29,11 @@ export function SalesShell({
                 Comercial
               </span>
             </Link>
+            {/* Separador entre logo y navegación */}
+            <span
+              aria-hidden
+              className="hidden sm:block mx-6 h-5 w-px bg-white/15"
+            />
             <SalesNav />
           </div>
           <div className="flex items-center gap-2">

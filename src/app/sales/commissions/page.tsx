@@ -47,6 +47,7 @@ export default async function SalesCommissionsPage() {
       },
     },
   });
+  const hasIban = !!salesRep?.iban;
 
   if (!salesRep) {
     return (
@@ -59,11 +60,12 @@ export default async function SalesCommissionsPage() {
   }
 
   const commissions = salesRep.commissions;
+  // Para el comercial, una incidencia sigue siendo dinero pendiente de cobro
   const pendingCents = commissions
-    .filter((c) => c.status === "PENDING")
+    .filter((c) => c.status === "PENDING" || c.status === "INCIDENT")
     .reduce((s, c) => s + c.amountCents, 0);
   const paidCents = commissions
-    .filter((c) => c.status === "PAID")
+    .filter((c) => c.status === "TRANSFERRED")
     .reduce((s, c) => s + c.amountCents, 0);
   const totalCents = pendingCents + paidCents;
 
@@ -79,6 +81,20 @@ export default async function SalesCommissionsPage() {
           </p>
         </div>
 
+        {/* Aviso: sin IBAN no podemos transferir */}
+        {!hasIban && commissions.length > 0 && (
+          <div className="card-paper p-4 border-l-4 border-amber-500 text-sm">
+            Para poder pagarte por transferencia,{" "}
+            <a
+              href="/sales/profile"
+              className="font-semibold text-brand hover:underline"
+            >
+              añade tu IBAN en tu perfil
+            </a>
+            .
+          </div>
+        )}
+
         {/* Resumen */}
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
           {[
@@ -91,7 +107,7 @@ export default async function SalesCommissionsPage() {
                   : undefined,
             },
             {
-              label: "Ya cobrado",
+              label: "Transferido",
               value: fmt(paidCents),
               color:
                 paidCents > 0
@@ -136,7 +152,7 @@ export default async function SalesCommissionsPage() {
                         "%",
                         "Estado",
                         "Fecha venta",
-                        "Pagada el",
+                        "Transferida el",
                       ].map((h) => (
                         <TableHead
                           key={h}
@@ -168,9 +184,11 @@ export default async function SalesCommissionsPage() {
                         </TableCell>
                         <TableCell
                           className={`tabular-nums font-semibold ${
-                            c.status === "PENDING"
-                              ? "text-amber-600 dark:text-amber-400"
-                              : "text-green-600 dark:text-green-400"
+                            c.status === "TRANSFERRED"
+                              ? "text-green-600 dark:text-green-400"
+                              : c.status === "INCIDENT"
+                                ? "text-red-600 dark:text-red-400"
+                                : "text-amber-600 dark:text-amber-400"
                           }`}
                         >
                           {fmt(c.amountCents)}
@@ -181,12 +199,25 @@ export default async function SalesCommissionsPage() {
                         <TableCell>
                           <Badge
                             variant={
-                              c.status === "PAID" ? "default" : "secondary"
+                              c.status === "TRANSFERRED"
+                                ? "default"
+                                : c.status === "INCIDENT"
+                                  ? "destructive"
+                                  : "secondary"
                             }
                             className="text-[11px]"
                           >
-                            {c.status === "PAID" ? "Pagada" : "Pendiente"}
+                            {c.status === "TRANSFERRED"
+                              ? "Transferida"
+                              : c.status === "INCIDENT"
+                                ? "Incidencia"
+                                : "Pendiente"}
                           </Badge>
+                          {c.status === "INCIDENT" && c.paymentNote && (
+                            <div className="text-[11px] text-red-500/90 mt-1 max-w-[180px]">
+                              {c.paymentNote}
+                            </div>
+                          )}
                         </TableCell>
                         <TableCell className="text-muted-foreground text-sm whitespace-nowrap">
                           {c.purchase.completedAt

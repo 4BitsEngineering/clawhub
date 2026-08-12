@@ -161,7 +161,8 @@ export default async function SalesPage() {
       .then((rep) =>
         rep
           ? db.commission.aggregate({
-              where: { salesRepId: rep.id, status: "PENDING" },
+              // No transferido aún = pendiente + incidencia
+              where: { salesRepId: rep.id, status: { in: ["PENDING", "INCIDENT"] } },
               _sum: { amountCents: true },
             })
           : null,

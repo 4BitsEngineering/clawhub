@@ -20,7 +20,7 @@
  *      re-pairea con un code nuevo.
  *
  * Uso:
- *   CLAWHUB_URL=https://clawhub-three.vercel.app \
+ *   CLAWHUB_URL=https://ia-suite-chi.vercel.app \
  *   CLAWHUB_PAIRING_CODE=ABCD-EFGH \
  *   BRIDGE_URL=http://localhost:3700 \
  *   CLAWHUB_WORKER_LABEL="Carlos García" \

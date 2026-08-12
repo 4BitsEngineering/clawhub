@@ -181,6 +181,15 @@ export default async function SalesCampaignSendPage({
 
   const alreadySentIds = new Set(priorSends.map((s) => s.prospectId));
 
+  // Vista previa: el {{link}} se sustituye por una etiqueta visual — en el
+  // envío real cada prospect recibe su enlace de seguimiento único.
+  const LINK_CHIP =
+    '<span style="display:inline-block;background:#ecfdf5;color:#047857;border:1px dashed #34d399;border-radius:6px;padding:0 6px;font-size:12px">enlace personalizado del prospect</span>';
+  const emailPreviewHtml = campaign.bodyEmail.replace(/\{\{link\}\}/g, LINK_CHIP);
+  const smsPreview = campaign.bodySms
+    ? campaign.bodySms.replace(/\{\{link\}\}/g, "[enlace personalizado]")
+    : null;
+
   return (
     <SalesShell email={session.user.email}>
       <div className="space-y-8">
@@ -192,6 +201,55 @@ export default async function SalesCampaignSendPage({
             {campaign.subject}
           </p>
         </div>
+
+        {/* Vista previa del mensaje */}
+        <Card className="card-paper">
+          <CardHeader>
+            <CardTitle>Qué recibirá el prospect</CardTitle>
+            <CardDescription>
+              Vista previa exacta del mensaje. El enlace se personaliza para
+              cada prospect (lleva su seguimiento individual).
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-5">
+            {/* Email */}
+            <div className="rounded-lg border border-border overflow-hidden">
+              <div className="bg-muted/40 px-4 py-2.5 border-b border-border space-y-0.5">
+                <p className="text-[11px] uppercase tracking-wider text-muted-foreground font-semibold">
+                  Email
+                </p>
+                <p className="text-sm">
+                  <span className="text-muted-foreground">Asunto:</span>{" "}
+                  <span className="font-medium">{campaign.subject}</span>
+                </p>
+              </div>
+              <div
+                className="px-4 py-4 text-sm leading-relaxed [&_a]:text-emerald-700 [&_a]:underline"
+                dangerouslySetInnerHTML={{ __html: emailPreviewHtml }}
+              />
+            </div>
+
+            {/* SMS */}
+            {smsPreview && (
+              <div className="rounded-lg border border-border overflow-hidden">
+                <div className="bg-muted/40 px-4 py-2.5 border-b border-border">
+                  <p className="text-[11px] uppercase tracking-wider text-muted-foreground font-semibold">
+                    SMS
+                  </p>
+                </div>
+                <p className="px-4 py-4 text-sm leading-relaxed whitespace-pre-wrap">
+                  {smsPreview}
+                </p>
+              </div>
+            )}
+            {!smsPreview && (
+              <p className="text-xs text-muted-foreground">
+                Esta campaña no tiene versión SMS — si envías por SMS se usará
+                el asunto como texto.
+              </p>
+            )}
+          </CardContent>
+        </Card>
 
         {/* Enviar */}
         <Card className="card-paper">

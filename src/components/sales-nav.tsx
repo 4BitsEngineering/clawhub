@@ -7,6 +7,7 @@ const navItems = [
   { href: "/sales", label: "Prospects", exact: true },
   { href: "/sales/campaigns", label: "Campañas", exact: false },
   { href: "/sales/commissions", label: "Comisiones", exact: false },
+  { href: "/sales/profile", label: "Perfil", exact: false },
 ];
 
 export function SalesNav() {

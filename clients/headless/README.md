@@ -25,7 +25,7 @@ sondea localmente.
 
 ```bash
 # Primer arranque — pairea con el code
-CLAWHUB_URL=https://clawhub-three.vercel.app \
+CLAWHUB_URL=https://ia-suite-chi.vercel.app \
 CLAWHUB_PAIRING_CODE=ABCD-EFGH \
 BRIDGE_URL=http://localhost:3700 \
 CLAWHUB_WORKER_LABEL="Carlos García" \
@@ -34,7 +34,7 @@ node clawhub-agent.js
 
 ```bash
 # Arranques subsiguientes — token ya guardado, no necesitas el code
-CLAWHUB_URL=https://clawhub-three.vercel.app \
+CLAWHUB_URL=https://ia-suite-chi.vercel.app \
 BRIDGE_URL=http://localhost:3700 \
 node clawhub-agent.js
 ```
@@ -43,7 +43,7 @@ Verás:
 
 ```
 [2026-05-16T...] [info] clawhub-agent v0.1.0-headless
-[2026-05-16T...] [info] clawhub_url: https://clawhub-three.vercel.app
+[2026-05-16T...] [info] clawhub_url: https://ia-suite-chi.vercel.app
 [2026-05-16T...] [info] bridge_url:  http://localhost:3700
 [2026-05-16T...] [info] sin token guardado — paireando…
 [2026-05-16T...] [info] pareado a "Asesoría Demo" (instance ...)
@@ -81,7 +81,7 @@ After=network-online.target
 Type=simple
 User=youruser
 WorkingDirectory=/home/youruser
-Environment="CLAWHUB_URL=https://clawhub-three.vercel.app"
+Environment="CLAWHUB_URL=https://ia-suite-chi.vercel.app"
 Environment="BRIDGE_URL=http://localhost:3700"
 Environment="CLAWHUB_WORKER_LABEL=PC-Carlos"
 ExecStart=/usr/bin/node /home/youruser/clawhub-agent.js
@@ -104,7 +104,7 @@ journalctl -u clawhub-agent -f
 # Con NSSM
 nssm install clawhub-agent "C:\Program Files\nodejs\node.exe" "C:\path\to\clawhub-agent.js"
 nssm set clawhub-agent AppEnvironmentExtra ^
-  CLAWHUB_URL=https://clawhub-three.vercel.app ^
+  CLAWHUB_URL=https://ia-suite-chi.vercel.app ^
   BRIDGE_URL=http://localhost:3700 ^
   CLAWHUB_WORKER_LABEL=PC-Maria
 nssm start clawhub-agent
