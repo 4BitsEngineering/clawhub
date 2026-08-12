@@ -19,9 +19,16 @@ async function signOutAction() {
 }
 
 export function SignOutButton() {
+  // Vive siempre en headers navy AI-Office → texto crema fijo
   return (
     <form action={signOutAction}>
-      <Button type="submit" variant="ghost" size="sm">
+      <Button
+        type="submit"
+        variant="ghost"
+        size="sm"
+        className="hover:bg-white/10"
+        style={{ color: "rgba(245,239,228,0.85)" }}
+      >
         Salir
       </Button>
     </form>

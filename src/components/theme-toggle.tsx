@@ -11,13 +11,17 @@ export function ThemeToggle() {
 
   useEffect(() => setMounted(true), []);
 
+  // Vive siempre en headers navy AI-Office → icono crema fijo
+  const headerStyle = { color: "rgba(245,239,228,0.85)" };
+
   // Pre-mount placeholder con el mismo tamaño para evitar layout shift.
   if (!mounted) {
     return (
       <Button
         variant="ghost"
         size="sm"
-        className="size-9 px-0"
+        className="size-9 px-0 hover:bg-white/10"
+        style={headerStyle}
         aria-hidden
       >
         <span className="size-4" />
@@ -31,7 +35,8 @@ export function ThemeToggle() {
     <Button
       variant="ghost"
       size="sm"
-      className="size-9 px-0"
+      className="size-9 px-0 hover:bg-white/10"
+      style={headerStyle}
       onClick={() => setTheme(isDark ? "light" : "dark")}
       aria-label={isDark ? "Cambiar a tema claro" : "Cambiar a tema oscuro"}
       title={isDark ? "Tema claro" : "Tema oscuro"}
