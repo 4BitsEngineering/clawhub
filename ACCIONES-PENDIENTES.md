@@ -79,6 +79,9 @@ npx supabase functions deploy stripe-webhook --project-ref sbtpydttrswiljnskrsq
 - La migración de BD (columnas nuevas en `LandingPage` y `Purchase`) **ya está aplicada** (`prisma db push`), y el GRANT a `service_role` sobre las tablas ya cubre las columnas nuevas.
 - Prueba de test tras el redeploy: comprar en la landing eligiendo un periodo de tokens → verificar en Stripe la factura inicial (fee + tokens), la suscripción de tokens activa y la de renovación del fee en `trialing` (sin cobro), y en la BD que la comisión = rate × fee (sin tokens).
 
+### Stripe Billing Portal — change `firm-client-portal`
+El portal del cliente (`/firm`) enlaza al Billing Portal de Stripe (facturas + gestión de suscripciones). **Requiere configurarlo una vez**: dashboard de Stripe → Settings → **Billing → Customer portal** → revisar opciones (permitir cancelar suscripción, ver historial de facturas) → **Save**. Sin esto, el botón "Gestionar facturación" dará error (la tarjeta muestra aviso de contactar soporte).
+
 ### Antes de ir a producción
 - [ ] Cambiar `STRIPE_SECRET_KEY` a `sk_live_...` (en `.env.local` y en Supabase secrets)
 - [ ] Cambiar `DEV_AUTH_ENABLED` a `false` o quitar la variable

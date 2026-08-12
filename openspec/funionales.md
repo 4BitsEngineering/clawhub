@@ -126,6 +126,20 @@ Acceso: rol `COMERCIAL`
 
 ---
 
+### Vista Cliente (FIRM_ADMIN) — `/firm` — change `firm-client-portal`
+
+Acceso: rol `FIRM_ADMIN` (el comprador de AI-Office; se crea automáticamente al pagar)
+
+**Portal de cliente de una sola página, con estética AI-Office** (navy + serif + acentos amarillo/crema). El cliente ve exactamente cuatro bloques:
+1. **Descarga del instalador** (`/api/v0/installer`)
+2. **Código de activación** actual (o generarlo — cuota de asientos + caducidad 7 días)
+3. **Consumo del mes** (tokens y tareas; sin costes internos)
+4. **Facturación** — acceso al Stripe Billing Portal para descargar facturas/recibos y gestionar las suscripciones de software y tokens
+
+**Todo lo demás está oculto para este rol**: baselines, usuarios, instances, MCP, settings y usage redirigen a `/firm`. La gestión operativa vive en el panel del operador. Prerequisito: Billing Portal configurado en el dashboard de Stripe.
+
+---
+
 ## Landing pública de venta
 
 **URL:** `/oferta/ai-office`

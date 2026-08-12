@@ -1,530 +1,368 @@
-import Link from "next/link";
+// Portal del cliente (FIRM_ADMIN) — change firm-client-portal.
+// Una sola página con: instalador, código de activación, consumo y
+// facturación (Stripe Billing Portal). Estética AI-Office autocontenida
+// (navy + serif + amarillo); no usa los shells internos ni el tema global.
+import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 import { db } from "@/lib/db";
+import { stripe } from "@/lib/stripe";
 import { generatePairingCode } from "@/lib/tokens";
 import { requireFirmAdmin } from "@/lib/session";
+import { SignOutButton } from "@/components/sign-out-button";
 
 export const dynamic = "force-dynamic";
 
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
-import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
-import { AutoRefresh } from "@/components/auto-refresh";
-import { SignOutButton } from "@/components/sign-out-button";
-import { ThemeToggle } from "@/components/theme-toggle";
-import { ActivityTimeline } from "@/components/activity-timeline";
-import { recordActivity } from "@/lib/activity";
+// Paleta AI-Office (referencia: producto)
+const NAVY = "#0c2b3d";
+const NAVY_DEEP = "#082130";
+const CREAM = "#f5efe4";
+const YELLOW = "#f2c94c";
+const SERIF = "Georgia, 'Times New Roman', serif";
 
-export default async function FirmPage() {
+// Código de instalación de larga vida (mismo criterio que el flujo de compra)
+const PAIRING_TTL_MS = 7 * 24 * 60 * 60 * 1000;
+
+function fmtInt(n: number) {
+  return n.toLocaleString("es-ES");
+}
+
+export default async function FirmPortalPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ billing?: string }>;
+}) {
   const session = await requireFirmAdmin();
   const firmId = session.user.firmId;
+  const params = await searchParams;
+  const billingError = params?.billing === "err";
 
-  async function generatePairingTokenAction() {
+  // ── Actions ────────────────────────────────────────────────────────────────
+
+  async function generateCodeAction() {
     "use server";
-    // Validar quota antes de generar pairing — evita repartir códigos que el
-    // /api/v0/pair va a rechazar con 403. La validación final sigue estando
-    // en pair/route.ts (defensa en profundidad).
-    const [seatsUsed, fresh] = await Promise.all([
-      db.instance.count({ where: { firmId } }),
-      db.firm.findUnique({ where: { id: firmId }, select: { seatsPurchased: true } }),
+    const s = await requireFirmAdmin();
+    const fid = s.user.firmId;
+    // Cuota de asientos: no repartir códigos que /api/v0/pair rechazará.
+    const [seatsUsed, firm] = await Promise.all([
+      db.instance.count({ where: { firmId: fid } }),
+      db.firm.findUnique({ where: { id: fid }, select: { seatsPurchased: true } }),
     ]);
-    if (!fresh) throw new Error("firm_not_found");
-    if (seatsUsed >= fresh.seatsPurchased) {
-      throw new Error(
-        `quota_full: ${seatsUsed}/${fresh.seatsPurchased} PCs. Contacta con soporte para ampliar tu plan.`,
-      );
+    if (!firm || seatsUsed >= firm.seatsPurchased) {
+      redirect("/firm?quota=1");
     }
-    const code = generatePairingCode();
     await db.pairingToken.create({
       data: {
-        firmId,
-        code,
-        expiresAt: new Date(Date.now() + 10 * 60 * 1000),
+        firmId: fid,
+        code: generatePairingCode(),
+        expiresAt: new Date(Date.now() + PAIRING_TTL_MS),
       },
     });
     revalidatePath("/firm");
   }
 
-  async function revokePairingTokenAction(formData: FormData) {
+  async function billingPortalAction() {
     "use server";
-    const sess = await requireFirmAdmin();
-    const tokenId = String(formData.get("token_id") ?? "");
-    if (!tokenId) throw new Error("token_id_required");
-    const t = await db.pairingToken.findUnique({
-      where: { id: tokenId },
-      select: {
-        id: true,
-        firmId: true,
-        code: true,
-        existingInstanceId: true,
-      },
-    });
-    if (!t || t.firmId !== sess.user.firmId) {
-      throw new Error("forbidden");
-    }
-    await db.pairingToken.delete({ where: { id: tokenId } });
-    await recordActivity({
-      kind: "pairing.revoke",
-      summary: t.existingInstanceId
-        ? `Revocó código re-pair (${t.code})`
-        : `Revocó código de alta de trabajador (${t.code})`,
-      firmId: t.firmId,
-      instanceId: t.existingInstanceId,
-      actor: sess,
-      metadata: { code: t.code, is_repair: !!t.existingInstanceId },
-    });
-    revalidatePath("/firm");
-  }
+    const s = await requireFirmAdmin();
+    if (!stripe) redirect("/firm?billing=err");
 
-  // Acceso rápido al re-pair desde la tabla de instancias. Antes solo estaba
-  // en /firm/instances/[id] (card "Re-emparejar este PC"), pero cuando un PC
-  // está offline y hay que pasar el código por teléfono, entrar al detalle
-  // es un click extra que sobra. Misma lógica que el action del detail:
-  // cancela tokens vivos para esa instancia y genera uno nuevo de 10 min.
-  async function quickRepairTokenAction(formData: FormData) {
-    "use server";
-    const sess = await requireFirmAdmin();
-    const instanceId = String(formData.get("instance_id") ?? "");
-    if (!instanceId) throw new Error("instance_id_required");
-    const inst = await db.instance.findUnique({
-      where: { id: instanceId },
-      select: { id: true, firmId: true, workerLabel: true },
-    });
-    if (!inst || inst.firmId !== sess.user.firmId) {
-      throw new Error("forbidden");
-    }
-    await db.pairingToken.deleteMany({
+    // Customer de Stripe derivado de la última compra con suscripción.
+    const purchase = await db.purchase.findFirst({
       where: {
-        firmId: inst.firmId,
-        existingInstanceId: inst.id,
-        usedAt: null,
+        firmId: s.user.firmId,
+        status: "COMPLETED",
+        stripeSubscriptionId: { not: null },
       },
+      orderBy: { completedAt: "desc" },
+      select: { stripeSubscriptionId: true, stripeSessionId: true },
     });
-    const code = generatePairingCode();
-    await db.pairingToken.create({
-      data: {
-        firmId: inst.firmId,
-        code,
-        expiresAt: new Date(Date.now() + 10 * 60 * 1000),
-        existingInstanceId: inst.id,
-      },
-    });
-    await recordActivity({
-      kind: "instance.re_pair_initiated",
-      summary: `Generó código re-pair para "${inst.workerLabel}" (acceso rápido)`,
-      firmId: inst.firmId,
-      instanceId: inst.id,
-      actor: sess,
-      metadata: { code, source: "firm_dashboard" },
-    });
-    revalidatePath("/firm");
+    if (!purchase) redirect("/firm?billing=err");
+
+    let customerId: string | null = null;
+    try {
+      // Solo compras del flujo con suscripción tienen Customer garantizado
+      // (el checkout antiguo en modo pago no creaba Customer en Stripe).
+      if (!purchase.stripeSubscriptionId) redirect("/firm?billing=err");
+      const sub = await stripe.subscriptions.retrieve(purchase.stripeSubscriptionId);
+      customerId = typeof sub.customer === "string" ? sub.customer : sub.customer.id;
+      if (!customerId) redirect("/firm?billing=err");
+
+      const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000";
+      const portal = await stripe.billingPortal.sessions.create({
+        customer: customerId,
+        return_url: `${appUrl}/firm`,
+      });
+      redirect(portal.url);
+    } catch (err) {
+      if ((err as { digest?: string })?.digest?.startsWith("NEXT_REDIRECT")) throw err;
+      console.error("[firm-portal] Billing portal error:", (err as Error).message);
+      redirect("/firm?billing=err");
+    }
   }
 
-  const [firm, latestInstaller, recentActivity] = await Promise.all([
-    db.firm.findUnique({
-      where: { id: firmId },
-      include: {
-        instances: {
-          orderBy: { createdAt: "desc" },
-        },
-        pairingTokens: {
-          where: {
-            usedAt: null,
-            expiresAt: { gt: new Date() },
-          },
-          orderBy: { createdAt: "desc" },
-        },
-      },
-    }),
-    db.stackBundle.findFirst({
-      where: {
-        kind: "INSTALLER",
-        channel: "stable",
-        deprecatedAt: null,
-      },
-      orderBy: { releasedAt: "desc" },
-      select: { version: true, sizeBytes: true },
-    }),
-    db.activity.findMany({
-      where: { firmId },
-      orderBy: { createdAt: "desc" },
-      take: 30,
-    }),
-  ]);
+  // ── Datos ──────────────────────────────────────────────────────────────────
 
-  if (!firm) {
-    return (
-      <main className="min-h-screen p-8 max-w-3xl mx-auto">
-        <p>Firma demo no encontrada. ¿Has corrido el seed?</p>
-      </main>
-    );
-  }
+  const now = new Date();
+  const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
+  const prevMonthStart = new Date(now.getFullYear(), now.getMonth() - 1, 1);
 
-  // Single snapshot of "now" for the render. Server Components run once per
-  // request so the impurity is deterministic for this render. The
-  // react-hooks/purity rule flags any Date.now() — disabling here once
-  // is cleaner than peppering disables next to every relative-time math.
-  // eslint-disable-next-line react-hooks/purity
-  const nowMs = Date.now();
+  const [firm, activeCode, usageMonth, usagePrev, purchase, seatsUsed] =
+    await Promise.all([
+      db.firm.findUnique({
+        where: { id: firmId },
+        select: { name: true, seatsPurchased: true, status: true },
+      }),
+      db.pairingToken.findFirst({
+        where: { firmId, usedAt: null, expiresAt: { gt: now } },
+        orderBy: { createdAt: "desc" },
+        select: { code: true, expiresAt: true },
+      }),
+      db.usageRecord.aggregate({
+        where: { firmId, startTime: { gte: monthStart } },
+        _sum: { inputTokens: true, outputTokens: true },
+        _count: { id: true },
+      }),
+      db.usageRecord.aggregate({
+        where: { firmId, startTime: { gte: prevMonthStart, lt: monthStart } },
+        _sum: { inputTokens: true, outputTokens: true },
+        _count: { id: true },
+      }),
+      db.purchase.findFirst({
+        // Solo compras con suscripción pueden abrir el Billing Portal (las del
+        // flujo antiguo en modo pago no tienen Customer en Stripe).
+        where: { firmId, status: "COMPLETED", stripeSubscriptionId: { not: null } },
+        orderBy: { completedAt: "desc" },
+        select: { stripeSubscriptionId: true, stripeSessionId: true },
+      }),
+      db.instance.count({ where: { firmId } }),
+    ]);
 
-  const onlineCount = firm.instances.filter(
-    (i) =>
-      i.lastHeartbeatAt &&
-      nowMs - i.lastHeartbeatAt.getTime() < 3 * 60 * 1000,
-  ).length;
+  if (!firm) redirect("/login");
 
-  const quotaFull = firm.instances.length >= firm.seatsPurchased;
+  const tokensMonth =
+    (usageMonth._sum.inputTokens ?? 0) + (usageMonth._sum.outputTokens ?? 0);
+  const tokensPrev =
+    (usagePrev._sum.inputTokens ?? 0) + (usagePrev._sum.outputTokens ?? 0);
+  const billingAvailable = !!stripe && !!purchase;
+  const quotaFull = seatsUsed >= firm.seatsPurchased;
+
+  const monthLabel = now.toLocaleDateString("es-ES", {
+    month: "long",
+    year: "numeric",
+  });
 
   return (
-    <main className="container-page min-h-screen py-8 sm:py-12 space-y-8">
-      <AutoRefresh intervalMs={5_000} />
-
-      <header className="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-4">
-        <div className="space-y-2">
-          <div className="eyebrow-chip">firm admin</div>
-          <h1 className="font-display text-3xl sm:text-4xl font-semibold tracking-tight">
-            {firm.name}
-          </h1>
-          <p className="text-sm text-muted-foreground">
-            {session.user.email} · Plan {firm.plan} ·{" "}
-            <span
-              className={
-                quotaFull ? "tabular-nums text-red-600 font-semibold" : "tabular-nums"
-              }
-            >
-              {firm.instances.length}
+    <main
+      className="min-h-screen"
+      style={{
+        background: `linear-gradient(160deg, ${NAVY} 0%, ${NAVY_DEEP} 100%)`,
+        color: CREAM,
+      }}
+    >
+      {/* Header */}
+      <header
+        className="sticky top-0 z-20 border-b"
+        style={{ borderColor: "rgba(245,239,228,0.12)", backgroundColor: NAVY }}
+      >
+        <div className="max-w-5xl mx-auto px-6 h-16 flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <span className="text-lg font-bold tracking-tight" style={{ color: CREAM }}>
+              AI&nbsp;Office
             </span>
-            /<span className="tabular-nums">{firm.seatsPurchased}</span>{" "}
-            instancias{quotaFull ? " (cupo lleno)" : ""} ·{" "}
-            <span className="tabular-nums">{onlineCount}</span> online
-          </p>
-        </div>
-        <div className="flex items-center gap-2 self-start sm:self-auto">
-          <Link
-            href="/firm/usage"
-            className="h-10 px-3 inline-flex items-center text-sm rounded border bg-background hover:bg-paper-2"
-          >
-            Consumo
-          </Link>
-          <Link
-            href="/firm/users"
-            className="h-10 px-3 inline-flex items-center text-sm rounded border bg-background hover:bg-paper-2"
-          >
-            Usuarios
-          </Link>
-          <Link
-            href="/firm/mcp"
-            className="h-10 px-3 inline-flex items-center text-sm rounded border bg-background hover:bg-paper-2"
-          >
-            MCP
-          </Link>
-          <Link
-            href="/firm/baselines"
-            className="h-10 px-3 inline-flex items-center text-sm rounded border bg-background hover:bg-paper-2"
-          >
-            Baselines
-          </Link>
-          <Link
-            href="/firm/settings"
-            className="h-10 px-3 inline-flex items-center text-sm rounded border bg-background hover:bg-paper-2"
-          >
-            Ajustes
-          </Link>
-          <form action={generatePairingTokenAction}>
-            <Button
-              type="submit"
-              className="h-10 px-4"
-              disabled={quotaFull}
-              title={
-                quotaFull
-                  ? "Cupo lleno: amplía el plan o desempareja un PC en desuso primero"
-                  : undefined
-              }
-              style={
-                quotaFull
-                  ? undefined
-                  : {
-                      backgroundColor: "var(--brand)",
-                      color: "var(--brand-foreground)",
-                    }
-              }
+            <span
+              className="hidden sm:inline-block text-[11px] px-2.5 py-0.5 rounded-full font-semibold"
+              style={{ backgroundColor: YELLOW, color: NAVY_DEEP }}
             >
-              + Añadir trabajador
-            </Button>
-          </form>
-          <ThemeToggle />
-          <SignOutButton />
+              {firm.name}
+            </span>
+          </div>
+          <div className="flex items-center gap-3 text-sm" style={{ color: "rgba(245,239,228,0.7)" }}>
+            <span className="hidden md:inline">{session.user.email}</span>
+            <SignOutButton />
+          </div>
         </div>
       </header>
 
-      {/* Tokens de alta nueva (NO los de re-pair: esos viven en la columna
-          "Acciones" de la tabla de instancias). Filtrar por
-          existingInstanceId=null deja fuera los códigos asociados a una
-          instancia existente. */}
-      {firm.pairingTokens.filter((t) => t.existingInstanceId === null).length >
-        0 && (
-        <Card className="card-paper border-0 shadow-none p-0">
-          <CardHeader className="px-6 pt-6">
-            <CardTitle className="font-display text-xl">
-              Alta de trabajador
-            </CardTitle>
-            <CardDescription>
-              Pasa al trabajador el enlace de descarga + su código. El
-              installer le pide el código en el wizard.
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="px-6 pb-6 space-y-4">
-            {latestInstaller ? (
-              <div className="card-quiet p-4 space-y-2">
-                <div className="eyebrow text-[10px]">1. Descarga el installer</div>
-                <div className="text-sm">
-                  <a
-                    href="/api/v0/installer?channel=stable"
-                    className="font-mono text-sm underline"
-                  >
-                    /api/v0/installer?channel=stable
-                  </a>
-                </div>
-                <p className="text-xs text-muted-foreground">
-                  v{latestInstaller.version} ·{" "}
-                  {(latestInstaller.sizeBytes / 1024 / 1024).toFixed(1)} MB ·
-                  Windows · sin firma (verá un aviso de SmartScreen la primera
-                  vez)
-                </p>
-              </div>
-            ) : (
-              <div className="card-quiet p-4">
-                <p className="text-xs text-muted-foreground">
-                  Aún no hay installer publicado. Pide al operator que suba un
-                  release (ver <code>scripts/release-installer.ts</code>).
-                </p>
-              </div>
-            )}
-            <div className="space-y-2">
-              <div className="eyebrow text-[10px]">2. Códigos activos</div>
-              <div className="flex flex-wrap gap-2">
-                {firm.pairingTokens
-                  .filter((t) => t.existingInstanceId === null)
-                  .map((t) => {
-                    const minsLeft = Math.max(
-                      0,
-                      Math.round((t.expiresAt.getTime() - nowMs) / 60000),
-                    );
-                    return (
-                      <div
-                        key={t.id}
-                        className="card-quiet px-4 py-3 flex items-center gap-3"
-                        style={{
-                          background:
-                            "linear-gradient(135deg, var(--brand-soft) 0%, transparent 100%)",
-                        }}
-                      >
-                        <span className="font-mono text-lg font-semibold tracking-[0.15em]">
-                          {t.code}
-                        </span>
-                        <span className="text-xs text-muted-foreground">
-                          caduca en {minsLeft} min
-                        </span>
-                        <form action={revokePairingTokenAction}>
-                          <input type="hidden" name="token_id" value={t.id} />
-                          <button
-                            type="submit"
-                            className="text-xs text-muted-foreground hover:text-destructive underline"
-                            title="Revocar este código (útil si se filtró o ya no hace falta)"
-                          >
-                            revocar
-                          </button>
-                        </form>
-                      </div>
-                    );
-                  })}
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-      )}
+      <div className="max-w-5xl mx-auto px-6 py-12 space-y-10">
+        {/* Hero */}
+        <div className="space-y-2">
+          <h1
+            className="text-4xl sm:text-5xl font-bold leading-tight"
+            style={{ fontFamily: SERIF, color: CREAM }}
+          >
+            Tu AI-Office<span style={{ color: YELLOW }}>.</span>
+          </h1>
+          <p className="text-base" style={{ color: "rgba(245,239,228,0.75)" }}>
+            Descarga, activa y gestiona tu suscripción. Todo lo demás lo hacemos
+            nosotros.
+          </p>
+        </div>
 
-      <Card className="card-paper border-0 shadow-none p-0">
-        <CardHeader className="px-6 pt-6">
-          <CardTitle className="font-display text-xl">Trabajadores</CardTitle>
-          <CardDescription>
-            Instancias de OpenClaw Copilot registradas para tu equipo.
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="px-2 sm:px-4 pb-4">
-          {firm.instances.length === 0 ? (
-            <p className="text-sm text-muted-foreground px-4 py-8 text-center">
-              Aún no hay instancias. Pulsa{" "}
-              <strong>"+ Añadir trabajador"</strong> arriba para generar un
-              pairing code y registrar el primer PC.
+        {/* Tarjetas */}
+        <div className="grid md:grid-cols-2 gap-6">
+          {/* ── Instalador ── */}
+          <section
+            className="rounded-2xl p-7 space-y-4 shadow-xl"
+            style={{ backgroundColor: CREAM, color: NAVY_DEEP }}
+          >
+            <p className="text-[11px] font-bold uppercase tracking-[0.14em]" style={{ color: "#8a8574" }}>
+              Instalador
             </p>
-          ) : (
-            <div className="overflow-x-auto">
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead className="eyebrow text-[10px]">
-                      Trabajador
-                    </TableHead>
-                    <TableHead className="eyebrow text-[10px]">
-                      Estado
-                    </TableHead>
-                    <TableHead className="eyebrow text-[10px]">
-                      Versión
-                    </TableHead>
-                    <TableHead className="eyebrow text-[10px]">OS</TableHead>
-                    <TableHead className="eyebrow text-[10px]">
-                      Último heartbeat
-                    </TableHead>
-                    <TableHead className="eyebrow text-[10px] text-right">
-                      Acciones
-                    </TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {firm.instances.map((i) => {
-                    const isOnline =
-                      i.lastHeartbeatAt &&
-                      nowMs - i.lastHeartbeatAt.getTime() < 3 * 60 * 1000;
-                    // Re-pair token activo (no usado, no caducado) para esta
-                    // instancia. La query de arriba ya trae todos los tokens
-                    // vivos de la firma; aquí filtramos por existingInstanceId.
-                    const activeRepair = firm.pairingTokens.find(
-                      (t) => t.existingInstanceId === i.id,
-                    );
-                    const repairMinsLeft = activeRepair
-                      ? Math.max(
-                          0,
-                          Math.round(
-                            (activeRepair.expiresAt.getTime() - nowMs) /
-                              60000,
-                          ),
-                        )
-                      : null;
-                    return (
-                      <TableRow key={i.id} className="hover:bg-paper-2/60">
-                        <TableCell className="font-medium">
-                          <Link
-                            href={`/firm/instances/${i.id}`}
-                            className="hover:text-brand transition-colors flex items-center gap-2"
-                          >
-                            <span
-                              className="h-2 w-2 rounded-full shrink-0"
-                              style={{
-                                backgroundColor: isOnline
-                                  ? "var(--brand)"
-                                  : "#bbb",
-                              }}
-                            />
-                            {i.workerLabel}
-                          </Link>
-                        </TableCell>
-                        <TableCell>
-                          <Badge variant={isOnline ? "default" : "secondary"}>
-                            {isOnline ? "online" : "offline"}
-                          </Badge>
-                        </TableCell>
-                        <TableCell className="tabular-nums text-sm">
-                          {i.version}
-                        </TableCell>
-                        <TableCell className="text-muted-foreground text-sm">
-                          {i.os ?? "—"}
-                        </TableCell>
-                        <TableCell className="text-muted-foreground text-sm">
-                          {i.lastHeartbeatAt
-                            ? i.lastHeartbeatAt.toLocaleString("es-ES")
-                            : "nunca"}
-                        </TableCell>
-                        <TableCell className="text-right">
-                          {activeRepair ? (
-                            <div
-                              className="inline-flex items-center gap-2 px-2 py-0.5 rounded text-xs"
-                              style={{
-                                background:
-                                  "linear-gradient(135deg, var(--brand-soft) 0%, transparent 100%)",
-                              }}
-                              title={`Pásale este código al trabajador. Caduca en ${repairMinsLeft} min.`}
-                            >
-                              <span className="font-mono font-semibold tracking-[0.1em]">
-                                {activeRepair.code}
-                              </span>
-                              <span className="text-muted-foreground">
-                                {repairMinsLeft}m
-                              </span>
-                              <form action={revokePairingTokenAction}>
-                                <input
-                                  type="hidden"
-                                  name="token_id"
-                                  value={activeRepair.id}
-                                />
-                                <button
-                                  type="submit"
-                                  className="text-muted-foreground hover:text-destructive"
-                                  title="Revocar este código"
-                                  aria-label="Revocar código"
-                                >
-                                  ×
-                                </button>
-                              </form>
-                            </div>
-                          ) : (
-                            <form action={quickRepairTokenAction}>
-                              <input
-                                type="hidden"
-                                name="instance_id"
-                                value={i.id}
-                              />
-                              <Button
-                                type="submit"
-                                variant="ghost"
-                                size="sm"
-                                className="h-7 px-2 text-xs text-muted-foreground hover:text-foreground"
-                                title="Generar código re-pair (si el trabajador reinstaló el PC)"
-                              >
-                                re-pair
-                              </Button>
-                            </form>
-                          )}
-                        </TableCell>
-                      </TableRow>
-                    );
-                  })}
-                </TableBody>
-              </Table>
-            </div>
-          )}
-        </CardContent>
-      </Card>
+            <h2 className="text-2xl font-bold" style={{ fontFamily: SERIF }}>
+              Descarga AI-Office<span style={{ color: YELLOW }}>.</span>
+            </h2>
+            <p className="text-sm leading-relaxed" style={{ color: "#4a4a42" }}>
+              Ejecuta el instalador en el PC de trabajo. Durante la instalación
+              te pedirá tu código de activación.
+            </p>
+            <a
+              href="/api/v0/installer"
+              className="inline-block rounded-xl px-6 py-3.5 font-semibold text-sm transition-opacity hover:opacity-90"
+              style={{ backgroundColor: NAVY, color: CREAM }}
+            >
+              ⬇ Descargar para Windows
+            </a>
+          </section>
 
-      <Card className="card-paper border-0 shadow-none p-0">
-        <CardHeader className="px-6 pt-6">
-          <CardTitle className="font-display text-xl">Actividad reciente</CardTitle>
-          <CardDescription>
-            Últimos eventos en tu equipo: altas, comandos remotos, baselines,
-            cambios de configuración.
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="px-6 pb-6">
-          <ActivityTimeline
-            activities={recentActivity}
-            emptyMessage="Aún no hay actividad registrada en tu firma."
-          />
-        </CardContent>
-      </Card>
+          {/* ── Código de activación ── */}
+          <section
+            className="rounded-2xl p-7 space-y-4 shadow-xl"
+            style={{ backgroundColor: CREAM, color: NAVY_DEEP }}
+          >
+            <p className="text-[11px] font-bold uppercase tracking-[0.14em]" style={{ color: "#8a8574" }}>
+              Código de activación
+            </p>
+            {activeCode ? (
+              <>
+                <div
+                  className="rounded-xl px-5 py-4 text-center"
+                  style={{ backgroundColor: NAVY, color: CREAM }}
+                >
+                  <span
+                    className="font-mono text-3xl font-bold tracking-[0.15em]"
+                    style={{ color: YELLOW }}
+                  >
+                    {activeCode.code}
+                  </span>
+                </div>
+                <p className="text-sm" style={{ color: "#4a4a42" }}>
+                  Válido hasta el{" "}
+                  <strong>
+                    {activeCode.expiresAt.toLocaleDateString("es-ES", {
+                      day: "numeric",
+                      month: "long",
+                    })}
+                  </strong>{" "}
+                  · un solo uso. Introdúcelo cuando el instalador te lo pida.
+                </p>
+              </>
+            ) : quotaFull ? (
+              <p className="text-sm leading-relaxed" style={{ color: "#4a4a42" }}>
+                Has activado los <strong>{firm.seatsPurchased}</strong> equipos
+                de tu plan. Para ampliar puestos, escríbenos a{" "}
+                <a href="mailto:info@iaofi.com" className="underline font-semibold">
+                  info@iaofi.com
+                </a>
+                .
+              </p>
+            ) : (
+              <>
+                <p className="text-sm leading-relaxed" style={{ color: "#4a4a42" }}>
+                  No tienes ningún código activo. Genera uno nuevo para activar
+                  tu equipo.
+                </p>
+                <form action={generateCodeAction}>
+                  <button
+                    type="submit"
+                    className="rounded-xl px-6 py-3 font-semibold text-sm transition-opacity hover:opacity-90"
+                    style={{ backgroundColor: YELLOW, color: NAVY_DEEP }}
+                  >
+                    Generar código
+                  </button>
+                </form>
+              </>
+            )}
+          </section>
+
+          {/* ── Consumo ── */}
+          <section
+            className="rounded-2xl p-7 space-y-4 shadow-xl"
+            style={{ backgroundColor: CREAM, color: NAVY_DEEP }}
+          >
+            <p className="text-[11px] font-bold uppercase tracking-[0.14em]" style={{ color: "#8a8574" }}>
+              Consumo · {monthLabel}
+            </p>
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <div className="text-3xl font-bold tabular-nums" style={{ fontFamily: SERIF }}>
+                  {fmtInt(tokensMonth)}
+                </div>
+                <div className="text-xs mt-0.5" style={{ color: "#8a8574" }}>
+                  tokens usados
+                </div>
+              </div>
+              <div>
+                <div className="text-3xl font-bold tabular-nums" style={{ fontFamily: SERIF }}>
+                  {fmtInt(usageMonth._count.id)}
+                </div>
+                <div className="text-xs mt-0.5" style={{ color: "#8a8574" }}>
+                  tareas ejecutadas
+                </div>
+              </div>
+            </div>
+            <p className="text-sm pt-1" style={{ color: "#4a4a42" }}>
+              Mes anterior: {fmtInt(tokensPrev)} tokens ·{" "}
+              {fmtInt(usagePrev._count.id)} tareas.
+            </p>
+          </section>
+
+          {/* ── Facturación ── */}
+          <section
+            className="rounded-2xl p-7 space-y-4 shadow-xl"
+            style={{ backgroundColor: CREAM, color: NAVY_DEEP }}
+          >
+            <p className="text-[11px] font-bold uppercase tracking-[0.14em]" style={{ color: "#8a8574" }}>
+              Facturación
+            </p>
+            <h2 className="text-2xl font-bold" style={{ fontFamily: SERIF }}>
+              Tus recibos y suscripciones<span style={{ color: YELLOW }}>.</span>
+            </h2>
+            <p className="text-sm leading-relaxed" style={{ color: "#4a4a42" }}>
+              Descarga tus facturas y gestiona la suscripción de software y el
+              plan de tokens desde el portal seguro de pago.
+            </p>
+            {billingError && (
+              <p className="text-sm font-semibold" style={{ color: "#b3261e" }}>
+                No hemos podido abrir el portal de facturación. Escríbenos a
+                info@iaofi.com y lo resolvemos.
+              </p>
+            )}
+            {billingAvailable ? (
+              <form action={billingPortalAction}>
+                <button
+                  type="submit"
+                  className="rounded-xl px-6 py-3.5 font-semibold text-sm transition-opacity hover:opacity-90"
+                  style={{ backgroundColor: NAVY, color: CREAM }}
+                >
+                  Gestionar facturación →
+                </button>
+              </form>
+            ) : (
+              <p className="text-sm italic" style={{ color: "#8a8574" }}>
+                Disponible próximamente para tu cuenta.
+              </p>
+            )}
+          </section>
+        </div>
+
+        {/* Pie */}
+        <p className="text-sm text-center pt-4" style={{ color: "rgba(245,239,228,0.55)" }}>
+          ¿Necesitas ayuda? Escríbenos a{" "}
+          <a href="mailto:info@iaofi.com" className="underline" style={{ color: CREAM }}>
+            info@iaofi.com
+          </a>{" "}
+          y te acompañamos en la instalación.
+        </p>
+      </div>
     </main>
   );
 }
