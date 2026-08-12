@@ -121,6 +121,80 @@
   --ink: #e5e7eb;
 }
 
+/* ── Tema AI-Office (change aioffice-brand-theme) ─────────────────────────────
+   Scope aplicado por los shells (operator/empresa/sales) y el login. Doble
+   nivel: tokens del LIENZO (navy + crema + acento amarillo) y reset dentro de
+   las TARJETAS (crema con texto oscuro, botones navy). Las páginas interiores
+   heredan el tema sin tocarse. Prevalece sobre :root y .dark (scope de
+   elemento). Paleta compartida con el portal /firm. */
+.aio-canvas {
+  --background: #0c2b3d;
+  --foreground: #f5efe4;
+  --card: rgba(245, 239, 228, 0.05);
+  --card-foreground: #f5efe4;
+  --popover: #0c2b3d;
+  --popover-foreground: #f5efe4;
+  --primary: #f2c94c;
+  --primary-foreground: #082130;
+  --secondary: rgba(245, 239, 228, 0.1);
+  --secondary-foreground: #f5efe4;
+  --muted: rgba(245, 239, 228, 0.08);
+  --muted-foreground: rgba(245, 239, 228, 0.72);
+  --accent: rgba(242, 201, 76, 0.15);
+  --accent-foreground: #f5efe4;
+  --border: rgba(245, 239, 228, 0.16);
+  --input: rgba(245, 239, 228, 0.22);
+  --ring: #f2c94c;
+  --brand: #f2c94c;
+  --brand-soft: rgba(242, 201, 76, 0.2);
+  --brand-foreground: #082130;
+
+  background: linear-gradient(160deg, #0c2b3d 0%, #082130 100%);
+  color: var(--foreground);
+}
+
+/* Titulares de marca: serif + punto final amarillo */
+.aio-canvas h1 {
+  font-family: Georgia, "Times New Roman", serif;
+  letter-spacing: -0.01em;
+}
+.aio-canvas h1::after {
+  content: ".";
+  color: #f2c94c;
+}
+
+/* Dentro de las tarjetas: crema con texto oscuro (como el portal del cliente) */
+.aio-canvas .card-paper,
+.aio-canvas .card-quiet {
+  --background: #fbf7ec;
+  --foreground: #082130;
+  --card: #f5efe4;
+  --card-foreground: #082130;
+  --popover: #f5efe4;
+  --popover-foreground: #082130;
+  --primary: #0c2b3d;
+  --primary-foreground: #f5efe4;
+  --secondary: rgba(8, 33, 48, 0.07);
+  --secondary-foreground: #082130;
+  --muted: rgba(8, 33, 48, 0.06);
+  --muted-foreground: #6f6a5c;
+  --accent: rgba(242, 201, 76, 0.25);
+  --accent-foreground: #082130;
+  --border: rgba(8, 33, 48, 0.12);
+  --input: rgba(8, 33, 48, 0.2);
+  --ring: #0c2b3d;
+  --brand: #0c2b3d;
+  --brand-soft: rgba(242, 201, 76, 0.35);
+  --brand-foreground: #f5efe4;
+
+  color: var(--foreground);
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.18);
+}
+.aio-canvas .card-paper {
+  background-color: var(--card);
+  border-color: transparent;
+}
+
 @layer base {
   * {
     @apply border-border outline-ring/50;

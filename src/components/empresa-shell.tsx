@@ -2,6 +2,15 @@ import Link from "next/link";
 import { SignOutButton } from "@/components/sign-out-button";
 import { ThemeToggle } from "@/components/theme-toggle";
 
+// Paleta AI-Office (ver .aio-canvas en globals.css)
+const NAVY = "#0c2b3d";
+const NAVY_DEEP = "#082130";
+const CREAM = "#f5efe4";
+const YELLOW = "#f2c94c";
+
+const linkCls = "px-3 py-1 text-xs rounded-full transition-colors";
+const linkStyle = { color: "rgba(245,239,228,0.7)" };
+
 export function EmpresaShell({
   email,
   isOperator = false,
@@ -15,61 +24,60 @@ export function EmpresaShell({
   return (
     <div className="min-h-screen flex flex-col">
       <header
-        className="sticky top-0 z-30 border-b border-violet-700/30"
-        style={{ backgroundColor: "#2e1065" }}
+        className="sticky top-0 z-30 border-b"
+        style={{
+          backgroundColor: NAVY,
+          borderColor: "rgba(245,239,228,0.12)",
+        }}
       >
         <div className="container-page flex items-center justify-between h-14">
           <div className="flex items-center">
             <Link
               href="/empresa"
-              className="text-sm font-semibold tracking-tight text-white hover:text-violet-100 transition-colors"
+              className="text-sm font-bold tracking-tight transition-opacity hover:opacity-80"
+              style={{ color: CREAM }}
             >
-              AI-Office · Empresa
+              AI&nbsp;Office
             </Link>
+            <span
+              className="hidden sm:inline-block ml-3 text-[11px] px-2.5 py-0.5 rounded-full font-semibold"
+              style={{ backgroundColor: YELLOW, color: NAVY_DEEP }}
+            >
+              Empresa
+            </span>
             {/* Separador entre logo y navegación */}
             <span
               aria-hidden
-              className="hidden sm:block mx-6 h-5 w-px bg-white/15"
+              className="hidden sm:block mx-6 h-5 w-px"
+              style={{ backgroundColor: "rgba(245,239,228,0.15)" }}
             />
             <nav className="hidden sm:flex items-center gap-1">
-              <Link
-                href="/empresa"
-                className="px-3 py-1 text-xs text-violet-200/80 hover:text-white hover:bg-white/10 rounded transition-colors"
-              >
+              <Link href="/empresa" className={linkCls} style={linkStyle}>
                 Comerciales
               </Link>
-              <Link
-                href="/empresa/prospects"
-                className="px-3 py-1 text-xs text-violet-200/80 hover:text-white hover:bg-white/10 rounded transition-colors"
-              >
+              <Link href="/empresa/prospects" className={linkCls} style={linkStyle}>
                 Mis prospects
               </Link>
               {isOperator && (
                 <>
-                  <Link
-                    href="/empresa/campaigns"
-                    className="px-3 py-1 text-xs text-violet-200/80 hover:text-white hover:bg-white/10 rounded transition-colors"
-                  >
+                  <Link href="/empresa/campaigns" className={linkCls} style={linkStyle}>
                     Campañas
                   </Link>
-                  <Link
-                    href="/empresa/landing"
-                    className="px-3 py-1 text-xs text-violet-200/80 hover:text-white hover:bg-white/10 rounded transition-colors"
-                  >
+                  <Link href="/empresa/landing" className={linkCls} style={linkStyle}>
                     Landing
                   </Link>
                 </>
               )}
-              <Link
-                href="/empresa/commissions"
-                className="px-3 py-1 text-xs text-violet-200/80 hover:text-white hover:bg-white/10 rounded transition-colors"
-              >
+              <Link href="/empresa/commissions" className={linkCls} style={linkStyle}>
                 Comisiones
               </Link>
             </nav>
           </div>
           <div className="flex items-center gap-2">
-            <span className="hidden md:inline text-xs text-violet-200/70">
+            <span
+              className="hidden md:inline text-xs"
+              style={{ color: "rgba(245,239,228,0.7)" }}
+            >
               {email}
             </span>
             <ThemeToggle />
@@ -77,7 +85,7 @@ export function EmpresaShell({
           </div>
         </div>
       </header>
-      <div className="flex-1 bg-background">
+      <div className="flex-1 aio-canvas">
         <div className="container-page py-8 sm:py-10">{children}</div>
       </div>
     </div>

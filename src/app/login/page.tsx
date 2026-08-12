@@ -119,19 +119,29 @@ export default async function LoginPage({
   const devEnabled = process.env.DEV_AUTH_ENABLED === "true";
 
   return (
-    <main className="relative min-h-screen flex items-center justify-center p-6">
-      <div
-        aria-hidden
-        className="spotlight pointer-events-none absolute inset-x-0 top-0 h-[500px]"
-      />
+    <main className="aio-canvas relative min-h-screen flex items-center justify-center p-6">
       <div className="absolute top-4 right-4 z-10">
         <ThemeToggle />
       </div>
-      <Card className="card-paper border-0 shadow-none w-full max-w-md relative">
+      {/* Wordmark */}
+      <div className="absolute top-6 left-6 flex items-center gap-3">
+        <span className="text-lg font-bold tracking-tight" style={{ color: "#f5efe4" }}>
+          AI&nbsp;Office
+        </span>
+        <span
+          className="text-[11px] px-2.5 py-0.5 rounded-full font-semibold"
+          style={{ backgroundColor: "#f2c94c", color: "#082130" }}
+        >
+          acceso
+        </span>
+      </div>
+      <Card className="card-paper border-0 w-full max-w-md relative">
         <CardHeader className="space-y-3">
-          <div className="eyebrow-chip self-start">AI-Office Center · acceso</div>
-          <CardTitle className="font-display text-2xl">
-            Entrar al panel
+          <CardTitle
+            className="text-3xl"
+            style={{ fontFamily: "Georgia, 'Times New Roman', serif" }}
+          >
+            Entrar al panel<span style={{ color: "#f2c94c" }}>.</span>
           </CardTitle>
           <CardDescription>
             {devEnabled

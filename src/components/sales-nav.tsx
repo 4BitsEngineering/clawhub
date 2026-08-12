@@ -10,6 +10,10 @@ const navItems = [
   { href: "/sales/profile", label: "Perfil", exact: false },
 ];
 
+// Paleta AI-Office (ver .aio-canvas en globals.css)
+const NAVY_DEEP = "#082130";
+const YELLOW = "#f2c94c";
+
 export function SalesNav() {
   const pathname = usePathname();
 
@@ -23,10 +27,11 @@ export function SalesNav() {
           <Link
             key={item.href}
             href={item.href}
-            className={
+            className="px-3 py-1 text-xs rounded-full transition-colors"
+            style={
               active
-                ? "px-3 py-1 text-xs font-semibold text-white bg-white/20 rounded-md"
-                : "px-3 py-1 text-xs text-emerald-200/75 hover:text-white hover:bg-white/10 rounded-md transition-colors"
+                ? { backgroundColor: YELLOW, color: NAVY_DEEP, fontWeight: 600 }
+                : { color: "rgba(245,239,228,0.7)" }
             }
           >
             {item.label}

@@ -12,6 +12,11 @@ const navItems = [
   { href: "/empresa", label: "Ventas", exact: false },
 ];
 
+// Paleta AI-Office (ver .aio-canvas en globals.css)
+const NAVY_DEEP = "#082130";
+const CREAM = "#f5efe4";
+const YELLOW = "#f2c94c";
+
 export function OperatorNav() {
   const pathname = usePathname();
 
@@ -22,8 +27,11 @@ export function OperatorNav() {
 
   return (
     <nav
-      className="border-b border-blue-800/30"
-      style={{ backgroundColor: "#16325a" }}
+      className="border-b"
+      style={{
+        backgroundColor: NAVY_DEEP,
+        borderColor: "rgba(245,239,228,0.12)",
+      }}
     >
       <div className="container-page flex items-center justify-between h-10">
         <div className="flex items-center gap-1 overflow-x-auto">
@@ -33,10 +41,11 @@ export function OperatorNav() {
               <Link
                 key={item.href}
                 href={item.href}
-                className={
+                className="inline-flex items-center h-7 px-3 text-xs rounded-full transition-colors"
+                style={
                   active
-                    ? "inline-flex items-center h-7 px-3 text-xs font-medium rounded-md bg-white/15 text-white border-b-2 border-white"
-                    : "inline-flex items-center h-7 px-3 text-xs text-blue-200/80 hover:text-white hover:bg-white/10 rounded-md transition-colors"
+                    ? { backgroundColor: YELLOW, color: NAVY_DEEP, fontWeight: 600 }
+                    : { color: "rgba(245,239,228,0.7)" }
                 }
               >
                 {item.label}
@@ -46,7 +55,8 @@ export function OperatorNav() {
         </div>
         <Link
           href="/operator/firms/new"
-          className="inline-flex items-center h-7 px-3 text-xs font-semibold rounded-md shadow-sm bg-white text-blue-900 shrink-0"
+          className="inline-flex items-center h-7 px-3 text-xs font-semibold rounded-full shadow-sm shrink-0"
+          style={{ backgroundColor: CREAM, color: NAVY_DEEP }}
         >
           + Nueva empresa
         </Link>

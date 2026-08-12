@@ -31,6 +31,12 @@ El ORM es Prisma v7 con adapter-pg. El schema `clawhub` está expuesto en la API
 
 ---
 
+## Identidad visual — change `aioffice-brand-theme`
+
+Toda la aplicación (paneles de operador, empresa y comercial, portal del cliente y login) usa la **identidad AI-Office**: lienzo azul marino profundo, titulares serif con punto final amarillo, tarjetas crema y acento amarillo. Implementada como scope de variables CSS (`.aio-canvas` en `globals.css`) aplicado por los shells — las páginas interiores heredan el tema sin tocarse. La landing pública de venta conserva su estilo propio.
+
+---
+
 ## 3 Vistas
 
 ### Vista Operador — `/operator`
