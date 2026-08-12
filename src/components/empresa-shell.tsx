@@ -1,15 +1,13 @@
 import Link from "next/link";
 import { SignOutButton } from "@/components/sign-out-button";
 import { ThemeToggle } from "@/components/theme-toggle";
+import { EmpresaNav } from "@/components/empresa-nav";
 
 // Paleta AI-Office (ver .aio-canvas en globals.css)
 const NAVY = "#0c2b3d";
 const NAVY_DEEP = "#082130";
 const CREAM = "#f5efe4";
 const YELLOW = "#f2c94c";
-
-const linkCls = "px-3 py-1 text-xs rounded-full transition-colors";
-const linkStyle = { color: "rgba(245,239,228,0.7)" };
 
 export function EmpresaShell({
   email,
@@ -51,27 +49,7 @@ export function EmpresaShell({
               className="hidden sm:block mx-6 h-5 w-px"
               style={{ backgroundColor: "rgba(245,239,228,0.15)" }}
             />
-            <nav className="hidden sm:flex items-center gap-1">
-              <Link href="/empresa" className={linkCls} style={linkStyle}>
-                Comerciales
-              </Link>
-              <Link href="/empresa/prospects" className={linkCls} style={linkStyle}>
-                Mis prospects
-              </Link>
-              {isOperator && (
-                <>
-                  <Link href="/empresa/campaigns" className={linkCls} style={linkStyle}>
-                    Campañas
-                  </Link>
-                  <Link href="/empresa/landing" className={linkCls} style={linkStyle}>
-                    Landing
-                  </Link>
-                </>
-              )}
-              <Link href="/empresa/commissions" className={linkCls} style={linkStyle}>
-                Comisiones
-              </Link>
-            </nav>
+            <EmpresaNav isOperator={isOperator} />
           </div>
           <div className="flex items-center gap-2">
             <span
