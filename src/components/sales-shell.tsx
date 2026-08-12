@@ -1,6 +1,5 @@
 import Link from "next/link";
 import { SignOutButton } from "@/components/sign-out-button";
-import { ThemeToggle } from "@/components/theme-toggle";
 import { SalesNav } from "@/components/sales-nav";
 
 // Paleta AI-Office (ver .aio-canvas en globals.css)
@@ -55,7 +54,6 @@ export function SalesShell({
             >
               {email}
             </span>
-            <ThemeToggle />
             <SignOutButton />
           </div>
         </div>

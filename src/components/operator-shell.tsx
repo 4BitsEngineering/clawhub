@@ -1,6 +1,5 @@
 import Link from "next/link";
 import { SignOutButton } from "@/components/sign-out-button";
-import { ThemeToggle } from "@/components/theme-toggle";
 import { OperatorNav } from "@/components/operator-nav";
 
 // Paleta AI-Office (ver .aio-canvas en globals.css)
@@ -51,7 +50,6 @@ export function OperatorShell({
             >
               {email}
             </span>
-            <ThemeToggle />
             <SignOutButton />
           </div>
         </div>

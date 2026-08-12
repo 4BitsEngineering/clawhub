@@ -3,7 +3,6 @@ import { cookies } from "next/headers";
 import { signIn } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { DEV_COOKIE } from "@/lib/session";
-import { ThemeToggle } from "@/components/theme-toggle";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -107,9 +106,6 @@ export default async function LoginPage({
 
   return (
     <main className="aio-canvas relative min-h-screen flex items-center justify-center p-6">
-      <div className="absolute top-4 right-4 z-10">
-        <ThemeToggle />
-      </div>
       {/* Wordmark */}
       <div className="absolute top-6 left-6 flex items-center gap-3">
         <span className="text-lg font-bold tracking-tight" style={{ color: "#f5efe4" }}>
