@@ -7,22 +7,9 @@ import { ThemeToggle } from "@/components/theme-toggle";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
+import { Card, CardContent } from "@/components/ui/card";
 
 export const dynamic = "force-dynamic";
-
-async function loginAction(formData: FormData) {
-  "use server";
-  const email = (formData.get("email") as string | null)?.trim();
-  if (!email) return;
-  await signIn("nodemailer", { email, redirectTo: "/" });
-}
 
 async function passwordLoginAction(formData: FormData) {
   "use server";
@@ -135,130 +122,134 @@ export default async function LoginPage({
           acceso
         </span>
       </div>
-      <Card className="card-paper border-0 w-full max-w-md relative">
-        <CardHeader className="space-y-3">
-          <CardTitle
-            className="text-3xl"
-            style={{ fontFamily: "Georgia, 'Times New Roman', serif" }}
+      <div className="w-full max-w-md relative space-y-8">
+        {/* Hero sobre el lienzo */}
+        <div className="text-center space-y-3">
+          <h1
+            className="text-5xl font-bold leading-tight"
+            style={{ color: "#f5efe4" }}
           >
-            Entrar al panel<span style={{ color: "#f2c94c" }}>.</span>
-          </CardTitle>
-          <CardDescription>
-            {devEnabled
-              ? "Fase de validación: entra directo con un rol o usa tu email."
-              : "Entra con tu contraseña o pide un enlace de acceso por email."}
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-6">
-          {devEnabled ? (
-            <div className="space-y-3">
-              <form action={devLoginAction}>
-                <input type="hidden" name="role" value="OPERATOR" />
-                <Button
-                  type="submit"
-                  className="w-full"
-                  style={{ backgroundColor: "var(--brand)", color: "var(--brand-foreground)" }}
+            Tu oficina, con IA
+          </h1>
+          <p className="text-base" style={{ color: "rgba(245,239,228,0.75)" }}>
+            Accede a tu panel de AI&nbsp;Office.
+          </p>
+        </div>
+
+        {/* Aviso de magic link enviado (flujo de invitaciones) */}
+        {sent && (
+          <div
+            className="rounded-xl px-5 py-4 text-sm text-center"
+            style={{
+              backgroundColor: "rgba(242,201,76,0.15)",
+              color: "#f5efe4",
+              border: "1px solid rgba(242,201,76,0.4)",
+            }}
+          >
+            ✉ Te hemos enviado un enlace de acceso. Revisa tu email (y la
+            carpeta de spam).
+          </div>
+        )}
+
+        {/* Tarjeta de acceso */}
+        <Card className="card-paper border-0 rounded-2xl">
+          <CardContent className="p-8 space-y-5">
+            <form action={passwordLoginAction} className="space-y-4">
+              <div className="space-y-2">
+                <Label
+                  htmlFor="cred-email"
+                  className="text-[11px] font-bold uppercase tracking-[0.14em]"
+                  style={{ color: "#8a8574" }}
                 >
-                  Entrar como Operator (Admin) →
-                </Button>
-              </form>
-              <form action={devLoginAction}>
-                <input type="hidden" name="role" value="EMPRESA" />
-                <Button type="submit" variant="secondary" className="w-full">
-                  Entrar como Empresa →
-                </Button>
-              </form>
-              <form action={devLoginAction}>
-                <input type="hidden" name="role" value="COMERCIAL" />
-                <Button type="submit" variant="outline" className="w-full">
-                  Entrar como Comercial →
-                </Button>
-              </form>
-              <form action={devLoginAction}>
-                <input type="hidden" name="role" value="FIRM_ADMIN" />
-                <Button type="submit" variant="ghost" className="w-full">
-                  Entrar como Firm Admin →
-                </Button>
-              </form>
-              <p className="text-xs text-muted-foreground">
-                Acceso directo de validación sin verificación
-                (<code>DEV_AUTH_ENABLED</code>). Desactívalo o añade login real
-                antes de abrir la URL al público.
-              </p>
-            </div>
-          ) : null}
+                  Email
+                </Label>
+                <Input
+                  id="cred-email"
+                  name="email"
+                  type="email"
+                  required
+                  autoComplete="email"
+                  placeholder="tu@email.com"
+                  className="h-12 rounded-xl text-base"
+                />
+              </div>
+              <div className="space-y-2">
+                <Label
+                  htmlFor="cred-password"
+                  className="text-[11px] font-bold uppercase tracking-[0.14em]"
+                  style={{ color: "#8a8574" }}
+                >
+                  Contraseña
+                </Label>
+                <Input
+                  id="cred-password"
+                  name="password"
+                  type="password"
+                  required
+                  autoComplete="current-password"
+                  placeholder="••••••••"
+                  className="h-12 rounded-xl text-base"
+                />
+              </div>
+              {credError && (
+                <p className="text-sm font-semibold" style={{ color: "#b3261e" }}>
+                  Email o contraseña incorrectos.
+                </p>
+              )}
+              <Button
+                type="submit"
+                className="w-full h-12 rounded-xl text-base font-semibold"
+                style={{
+                  backgroundColor: "var(--brand)",
+                  color: "var(--brand-foreground)",
+                }}
+              >
+                Entrar →
+              </Button>
+            </form>
+            <p className="text-xs text-center" style={{ color: "#8a8574" }}>
+              ¿Has olvidado tu contraseña? Escríbenos a{" "}
+              <a href="mailto:info@iaofi.com" className="underline font-semibold">
+                info@iaofi.com
+              </a>
+            </p>
+          </CardContent>
+        </Card>
 
-          {/* Login con contraseña (solo usuarios con contraseña asignada) */}
-          <form action={passwordLoginAction} className="space-y-3">
-            <div className="space-y-2">
-              <Label htmlFor="cred-email">Email</Label>
-              <Input
-                id="cred-email"
-                name="email"
-                type="email"
-                required
-                autoComplete="email"
-                placeholder="tu@email.com"
-              />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="cred-password">Contraseña</Label>
-              <Input
-                id="cred-password"
-                name="password"
-                type="password"
-                required
-                autoComplete="current-password"
-                placeholder="••••••••"
-              />
-            </div>
-            {credError && (
-              <p className="text-sm text-red-600 dark:text-red-400">
-                Email o contraseña incorrectos.
-              </p>
-            )}
-            <Button
-              type="submit"
-              className="w-full"
-              style={{
-                backgroundColor: "var(--brand)",
-                color: "var(--brand-foreground)",
-              }}
+        {/* Acceso de validación (solo desarrollo) */}
+        {devEnabled && (
+          <div className="space-y-2 text-center">
+            <p
+              className="text-[11px] uppercase tracking-[0.14em] font-bold"
+              style={{ color: "rgba(245,239,228,0.5)" }}
             >
-              Entrar →
-            </Button>
-          </form>
-
-          <details className="border-t pt-3">
-            <summary className="cursor-pointer text-xs text-muted-foreground">
-              Login por email (magic link)
-            </summary>
-            {sent ? (
-              <p className="pt-3 text-sm text-muted-foreground">
-                ✔ Enlace de acceso enviado. Revisa tu email — si no llega en
-                unos minutos, mira en spam.
-              </p>
-            ) : (
-              <form action={loginAction} className="space-y-3 pt-3">
-                <div className="space-y-2">
-                  <Label htmlFor="email">Email</Label>
-                  <Input
-                    id="email"
-                    name="email"
-                    type="email"
-                    required
-                    autoComplete="email"
-                    placeholder="tu@email.com"
-                  />
-                </div>
-                <Button type="submit" variant="outline" size="sm" className="w-full">
-                  Enviar magic link
-                </Button>
-              </form>
-            )}
-          </details>
-        </CardContent>
-      </Card>
+              Acceso de validación · solo desarrollo
+            </p>
+            <div className="flex flex-wrap justify-center gap-2">
+              {[
+                ["OPERATOR", "Operador"],
+                ["EMPRESA", "Empresa"],
+                ["COMERCIAL", "Comercial"],
+                ["FIRM_ADMIN", "Cliente"],
+              ].map(([role, label]) => (
+                <form key={role} action={devLoginAction}>
+                  <input type="hidden" name="role" value={role} />
+                  <button
+                    type="submit"
+                    className="px-3.5 py-1.5 rounded-full text-xs font-medium transition-colors hover:bg-white/10"
+                    style={{
+                      color: "rgba(245,239,228,0.8)",
+                      border: "1px solid rgba(245,239,228,0.25)",
+                    }}
+                  >
+                    {label} →
+                  </button>
+                </form>
+              ))}
+            </div>
+          </div>
+        )}
+      </div>
     </main>
   );
 }
