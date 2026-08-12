@@ -321,18 +321,31 @@ async function createFeeRenewalSubscription(opts: {
   const trialEnd = Math.floor(Date.now() / 1000) + oneYear;
 
   try {
+    // subscriptions.create NO acepta product_data inline (a diferencia de
+    // Checkout): necesita un Price existente. Reutilizamos por lookup_key
+    // (uno por importe/moneda) y lo creamos si aún no existe.
+    const lookupKey = `aioffice-fee-renewal-${opts.currency}-${opts.renewalCents}`;
+    let priceId: string;
+    const existing = await stripe.prices.list({
+      lookup_keys: [lookupKey],
+      limit: 1,
+    });
+    if (existing.data[0]) {
+      priceId = existing.data[0].id;
+    } else {
+      const price = await stripe.prices.create({
+        currency: opts.currency,
+        unit_amount: opts.renewalCents,
+        recurring: { interval: "year" },
+        lookup_key: lookupKey,
+        product_data: { name: "AI-Office · Licencia Anual" },
+      });
+      priceId = price.id;
+    }
+
     const sub = await stripe.subscriptions.create({
       customer: opts.customerId,
-      items: [
-        {
-          price_data: {
-            currency: opts.currency,
-            product_data: { name: "AI-Office · Licencia Anual (renovación)" },
-            unit_amount: opts.renewalCents,
-            recurring: { interval: "year", interval_count: 1 },
-          },
-        },
-      ],
+      items: [{ price: priceId }],
       trial_end: trialEnd,
       proration_behavior: "none",
       metadata: { kind: "fee-renewal" },
