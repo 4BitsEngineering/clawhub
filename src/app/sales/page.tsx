@@ -154,7 +154,24 @@ export default async function SalesPage() {
   const [salesRep, commissionSummary, campaigns] = await Promise.all([
     db.salesRep.findUnique({
       where: { userId: session.user.id },
-      include: { prospects: { orderBy: { createdAt: "desc" } } },
+      include: {
+        prospects: {
+          orderBy: { createdAt: "desc" },
+          include: {
+            // Historial de envíos: qué campaña, por qué canal y cuándo
+            sends: {
+              where: { status: "SENT" },
+              select: {
+                campaignId: true,
+                channel: true,
+                sentAt: true,
+                campaign: { select: { name: true } },
+              },
+              orderBy: { sentAt: "desc" },
+            },
+          },
+        },
+      },
     }),
     db.salesRep
       .findUnique({ where: { userId: session.user.id }, select: { id: true } })
@@ -371,13 +388,33 @@ export default async function SalesPage() {
                           )}
                         </td>
 
-                        {/* Estado */}
+                        {/* Estado + campañas ya enviadas */}
                         <td className="px-3 py-4 align-top">
                           <span
                             className={`inline-flex items-center px-2.5 py-1 rounded-full text-[11px] font-semibold ${STATUS_PILL[p.status] ?? ""}`}
                           >
                             {STATUS_LABELS[p.status]}
                           </span>
+                          {p.sends.length > 0 && (
+                            <div className="mt-1.5 space-y-0.5">
+                              {p.sends.map((s, i) => (
+                                <div
+                                  key={i}
+                                  className="text-[11px] text-muted-foreground whitespace-nowrap"
+                                  title={`${s.campaign.name} · ${s.channel === "EMAIL" ? "email" : "SMS"}`}
+                                >
+                                  ✓ {s.campaign.name}{" "}
+                                  <span className="text-muted-foreground/70">
+                                    ({s.channel === "EMAIL" ? "email" : "SMS"}
+                                    {s.sentAt
+                                      ? ` · ${s.sentAt.toLocaleDateString("es-ES", { day: "numeric", month: "numeric" })}`
+                                      : ""}
+                                    )
+                                  </span>
+                                </div>
+                              ))}
+                            </div>
+                          )}
                         </td>
 
                         {/* Añadido */}
@@ -395,10 +432,26 @@ export default async function SalesPage() {
                                 {campaigns.length === 1 ? (
                                   <input type="hidden" name="campaignId" value={campaigns[0].id} />
                                 ) : (
-                                  <select name="campaignId" className={selectCls}>
-                                    {campaigns.map((c) => (
-                                      <option key={c.id} value={c.id}>{c.name}</option>
-                                    ))}
+                                  <select
+                                    name="campaignId"
+                                    className={selectCls}
+                                    // Preseleccionar la primera campaña NO enviada aún
+                                    defaultValue={
+                                      campaigns.find(
+                                        (c) => !p.sends.some((s) => s.campaignId === c.id),
+                                      )?.id ?? campaigns[0].id
+                                    }
+                                  >
+                                    {campaigns.map((c) => {
+                                      const yaEnviada = p.sends.some(
+                                        (s) => s.campaignId === c.id,
+                                      );
+                                      return (
+                                        <option key={c.id} value={c.id}>
+                                          {yaEnviada ? `✓ ${c.name} (enviada)` : c.name}
+                                        </option>
+                                      );
+                                    })}
                                   </select>
                                 )}
                                 <select name="channel" className={selectCls}>
