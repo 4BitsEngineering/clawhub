@@ -396,23 +396,54 @@ export default async function SalesPage() {
                             {STATUS_LABELS[p.status]}
                           </span>
                           {p.sends.length > 0 && (
-                            <div className="mt-1.5 space-y-0.5">
-                              {p.sends.map((s, i) => (
-                                <div
-                                  key={i}
-                                  className="text-[11px] text-muted-foreground whitespace-nowrap"
-                                  title={`${s.campaign.name} · ${s.channel === "EMAIL" ? "email" : "SMS"}`}
-                                >
-                                  ✓ {s.campaign.name}{" "}
-                                  <span className="text-muted-foreground/70">
-                                    ({s.channel === "EMAIL" ? "email" : "SMS"}
-                                    {s.sentAt
-                                      ? ` · ${s.sentAt.toLocaleDateString("es-ES", { day: "numeric", month: "numeric" })}`
-                                      : ""}
-                                    )
-                                  </span>
+                            <div className="mt-1.5">
+                              {/* Chip resumen → popover nativo con el histórico */}
+                              <button
+                                type="button"
+                                popoverTarget={`sends-${p.id}`}
+                                className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] border border-input text-muted-foreground hover:bg-muted/40 transition-colors cursor-pointer"
+                                title="Ver histórico de envíos"
+                              >
+                                ✉ {p.sends.length}{" "}
+                                {p.sends.length === 1 ? "envío" : "envíos"}
+                              </button>
+                              <div
+                                id={`sends-${p.id}`}
+                                popover="auto"
+                                className="rounded-2xl border-0 p-0 shadow-2xl backdrop:bg-black/40 max-w-md w-[90vw]"
+                                style={{ backgroundColor: "#f5efe4", color: "#082130" }}
+                              >
+                                <div className="px-6 py-4 border-b border-black/10 flex items-center justify-between gap-4">
+                                  <div>
+                                    <p className="text-[11px] font-bold uppercase tracking-[0.14em] text-black/40">
+                                      Histórico de envíos
+                                    </p>
+                                    <p className="font-semibold">{p.name}</p>
+                                  </div>
+                                  <button
+                                    type="button"
+                                    popoverTarget={`sends-${p.id}`}
+                                    popoverTargetAction="hide"
+                                    className="h-8 w-8 rounded-full hover:bg-black/5 transition-colors text-black/50"
+                                    aria-label="Cerrar"
+                                  >
+                                    ✕
+                                  </button>
                                 </div>
-                              ))}
+                                <ul className="px-6 py-4 space-y-2 max-h-72 overflow-y-auto text-sm">
+                                  {p.sends.map((s, i) => (
+                                    <li key={i} className="flex items-center justify-between gap-4">
+                                      <span>✓ {s.campaign.name}</span>
+                                      <span className="text-black/50 text-xs whitespace-nowrap">
+                                        {s.channel === "EMAIL" ? "email" : "SMS"}
+                                        {s.sentAt
+                                          ? ` · ${s.sentAt.toLocaleDateString("es-ES")}`
+                                          : ""}
+                                      </span>
+                                    </li>
+                                  ))}
+                                </ul>
+                              </div>
                             </div>
                           )}
                         </td>
