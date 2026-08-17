@@ -82,6 +82,15 @@ npx supabase functions deploy stripe-webhook --project-ref sbtpydttrswiljnskrsq
 ### Stripe Billing Portal — change `firm-client-portal`
 El portal del cliente (`/firm`) enlaza al Billing Portal de Stripe (facturas + gestión de suscripciones). **Requiere configurarlo una vez**: dashboard de Stripe → Settings → **Billing → Customer portal** → revisar opciones (permitir cancelar suscripción, ver historial de facturas) → **Save**. Sin esto, el botón "Gestionar facturación" dará error (la tarjeta muestra aviso de contactar soporte).
 
+### Jubilar el deployment viejo (`clawhub-three.vercel.app`)
+El instalador v0.3.8 lleva esa URL grabada (el configurator también la usa en su env). Hasta jubilarlo, ese deploy corre código antiguo contra la MISMA BD (fuente de bugs fantasma: pareaba sin provisionar el baseline). Fuentes ya actualizadas a `ia-suite-chi` en `ai-office-install-1` y `openclaw-configurator` (carpetas de Descargas).
+
+- [ ] Recompilar el instalador (`make build-release` en `ai-office-install-1`, necesita Rust/Tauri — máquina de Ramón) y publicarlo como v0.3.9 con `scripts/publish-installer.mjs`
+- [ ] Configurator en Vercel: `CLAWHUB_URL=https://ia-suite-chi.vercel.app` + redeploy
+- [ ] Verificar que no quedan instancias reales pareadas contra el dominio viejo (guardan su URL para heartbeat/updates)
+- [ ] Borrar el proyecto Vercel viejo
+- Truco para pruebas mientras tanto: el .exe respeta la variable de entorno `CLAWHUB_URL` (setx CLAWHUB_URL https://ia-suite-chi.vercel.app)
+
 ### Antes de ir a producción
 - [ ] Cambiar `STRIPE_SECRET_KEY` a `sk_live_...` (en `.env.local` y en Supabase secrets)
 - [ ] Cambiar `DEV_AUTH_ENABLED` a `false` o quitar la variable
