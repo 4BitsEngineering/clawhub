@@ -8,6 +8,10 @@ import {
   TOKEN_PERIODS_ORDER,
   TOKEN_PERIOD_LABEL,
   TOKEN_PERIOD_MONTHS,
+  effectiveFirstYearFeeCents,
+  bundledAnnualTotalCents,
+  periodInstallmentCents,
+  fmtEuros,
 } from "@/lib/pricing";
 import type { TokenBillingPeriod } from "@/generated/prisma/client";
 import { Button } from "@/components/ui/button";
@@ -111,6 +115,7 @@ export default async function EmpresaLandingPage() {
 
     revalidatePath("/empresa/landing");
     revalidatePath(`/oferta/${SLUG}`);
+    revalidatePath("/");
   }
 
   const landing = await db.landingPage.upsert({
@@ -141,41 +146,84 @@ export default async function EmpresaLandingPage() {
     return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
   }
 
+  // Resumen de precios en vigor (lo que ve el cliente ahora mismo)
+  const softwareNow = effectiveFirstYearFeeCents(landing);
+  const quotasNow = TOKEN_PERIODS_ORDER.filter((p) =>
+    landing.tokenPeriods.includes(p),
+  ).map((p) => ({
+    label: TOKEN_PERIOD_LABEL[p],
+    installment: periodInstallmentCents(bundledAnnualTotalCents(landing, p), p),
+    per:
+      p === "MONTHLY" ? "/mes" : p === "QUARTERLY" ? "/trim." : p === "SEMIANNUAL" ? "/sem." : "/año",
+  }));
+
   return (
     <EmpresaShell email={session.user.email} isOperator>
-      <div className="space-y-8">
+      <div className="space-y-8 max-w-3xl">
+        {/* ── Cabecera ── */}
         <div className="flex items-center justify-between gap-4 flex-wrap">
           <div>
             <h1 className="font-display text-2xl font-semibold tracking-tight">
-              Landing de venta
+              Landing y precios
             </h1>
             <p className="text-sm text-muted-foreground mt-1">
-              Configura la página que ven los prospects al hacer clic en la
-              campaña.
+              Lo que ve el cliente en la web y lo que paga. Los cambios se
+              aplican a la landing raíz y a /oferta al guardar.
             </p>
           </div>
-          <Link
-            href={`/oferta/${SLUG}`}
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            <Button variant="outline" size="sm">
-              Ver landing →
-            </Button>
-          </Link>
+          <div className="flex items-center gap-2">
+            <Link href="/" target="_blank" rel="noopener noreferrer">
+              <Button variant="outline" size="sm">
+                Ver landing raíz →
+              </Button>
+            </Link>
+            <Link href={`/oferta/${SLUG}`} target="_blank" rel="noopener noreferrer">
+              <Button variant="outline" size="sm">
+                Ver /oferta →
+              </Button>
+            </Link>
+          </div>
         </div>
 
+        {/* ── Resumen: precios en vigor ── */}
         <Card className="card-paper">
-          <CardHeader>
-            <CardTitle>Contenido</CardTitle>
+          <CardHeader className="pb-3">
+            <CardTitle className="text-base">Precios en vigor</CardTitle>
             <CardDescription>
-              Pega cualquier URL de YouTube o Vimeo — se convierte a embed
-              automáticamente.
+              Así se calculan hoy las cuotas que ve el cliente.
             </CardDescription>
           </CardHeader>
           <CardContent>
-            <form action={saveLandingAction} className="space-y-5">
-              {/* Headline */}
+            <div className="flex flex-wrap gap-2">
+              {quotasNow.map((q) => (
+                <span
+                  key={q.label}
+                  className="inline-flex items-baseline gap-1 rounded-full border border-border px-3 py-1.5 text-sm tabular-nums"
+                >
+                  <span className="text-xs text-muted-foreground">{q.label}</span>
+                  <strong>{fmtEuros(q.installment)}</strong>
+                  <span className="text-xs text-muted-foreground">{q.per}</span>
+                </span>
+              ))}
+              <span className="inline-flex items-baseline gap-1 rounded-full border border-border px-3 py-1.5 text-sm tabular-nums">
+                <span className="text-xs text-muted-foreground">Solo software</span>
+                <strong>{fmtEuros(softwareNow)}</strong>
+                <span className="text-xs text-muted-foreground">/año</span>
+              </span>
+            </div>
+          </CardContent>
+        </Card>
+
+        <form action={saveLandingAction} className="space-y-6">
+          {/* ── 1 · Contenido ── */}
+          <Card className="card-paper">
+            <CardHeader className="pb-3">
+              <CardTitle className="text-base">1 · Contenido</CardTitle>
+              <CardDescription>
+                Titular, vídeo y texto de venta de la landing.
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-5">
               <div className="space-y-2">
                 <Label htmlFor="headline" className="text-xs">
                   Título principal
@@ -184,204 +232,234 @@ export default async function EmpresaLandingPage() {
                   id="headline"
                   name="headline"
                   required
-                  defaultValue={
-                    landing?.headline ??
-                    "Transforma tu empresa con AI-Office"
-                  }
+                  defaultValue={landing.headline}
                   placeholder="Tu titular de venta"
                 />
               </div>
-
-              {/* Vídeo */}
               <div className="space-y-2">
                 <Label htmlFor="videoUrl" className="text-xs">
                   URL del vídeo{" "}
                   <span className="text-muted-foreground">
-                    (YouTube / Vimeo)
+                    (YouTube / Vimeo — se convierte a embed automáticamente)
                   </span>
                 </Label>
                 <Input
                   id="videoUrl"
                   name="videoUrl"
                   type="url"
-                  defaultValue={landing?.videoUrl ?? ""}
+                  defaultValue={landing.videoUrl}
                   placeholder="https://www.youtube.com/watch?v=..."
                 />
               </div>
-
-              {/* Cuerpo */}
               <div className="space-y-2">
                 <Label htmlFor="bodyHtml" className="text-xs">
                   Cuerpo HTML{" "}
-                  <span className="text-muted-foreground">(opcional)</span>
+                  <span className="text-muted-foreground">(opcional, solo /oferta)</span>
                 </Label>
                 <textarea
                   id="bodyHtml"
                   name="bodyHtml"
-                  rows={8}
-                  defaultValue={landing?.bodyHtml ?? ""}
+                  rows={5}
+                  defaultValue={landing.bodyHtml}
                   placeholder="<p>Texto de venta, características, testimonios…</p>"
                   className="w-full rounded-lg border border-input bg-transparent px-2.5 py-2 text-sm font-mono transition-colors outline-none placeholder:text-muted-foreground focus-visible:border-ring focus-visible:ring-1 focus-visible:ring-ring/50 resize-y"
                 />
               </div>
+            </CardContent>
+          </Card>
 
-              {/* ── Fee de licencia (suscripción anual) ── */}
-              <div className="rounded-lg border border-border p-4 space-y-4">
-                <div className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-                  Fee de licencia · suscripción anual
+          {/* ── 2 · Software ── */}
+          <Card className="card-paper">
+            <CardHeader className="pb-3">
+              <CardTitle className="text-base">
+                2 · Software (licencia anual)
+              </CardTitle>
+              <CardDescription>
+                El componente de licencia. Su importe efectivo es la base de la
+                comisión del comercial.
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-5">
+              <div className="grid sm:grid-cols-2 gap-5">
+                <div className="space-y-2">
+                  <Label htmlFor="renewalPrice" className="text-xs">
+                    Precio anual (€)
+                  </Label>
+                  <Input
+                    id="renewalPrice"
+                    name="renewalPrice"
+                    type="number"
+                    min="0"
+                    step="0.01"
+                    defaultValue={renewalEuros}
+                  />
+                  <p className="text-[11px] text-muted-foreground">
+                    Precio de lista del software.
+                  </p>
                 </div>
-                <div className="grid sm:grid-cols-2 gap-4">
-                  <div className="space-y-2">
-                    <Label htmlFor="renewalPrice" className="text-xs">
-                      Precio de renovación anual (€)
-                    </Label>
-                    <Input
-                      id="renewalPrice"
-                      name="renewalPrice"
-                      type="number"
-                      min="0"
-                      step="0.01"
-                      defaultValue={renewalEuros}
-                    />
-                    <p className="text-[11px] text-muted-foreground">
-                      Lo que se cobra cada año a partir del segundo.
-                    </p>
-                  </div>
-                  <div className="space-y-2">
-                    <Label className="text-xs">Descuento del primer año</Label>
-                    <div className="flex gap-2">
-                      <select
-                        name="feeDiscountType"
-                        defaultValue={isPercent ? "PERCENT" : "ABSOLUTE"}
-                        className="h-9 rounded-md border border-border bg-background px-2 text-sm"
-                      >
-                        <option value="ABSOLUTE">Precio (€)</option>
-                        <option value="PERCENT">Porcentaje (%)</option>
-                      </select>
-                      <Input
-                        name="firstYearPrice"
-                        type="number"
-                        min="0"
-                        step="0.01"
-                        defaultValue={firstYearEuros}
-                        placeholder="149.00"
-                        className="flex-1"
-                      />
-                      <Input
-                        name="discountPercent"
-                        type="number"
-                        min="0"
-                        max="100"
-                        step="1"
-                        defaultValue={percentValue}
-                        placeholder="%"
-                        className="w-20"
-                      />
-                    </div>
-                    <p className="text-[11px] text-muted-foreground">
-                      Según el tipo, se usa el precio directo o el %. El primer
-                      año es la base de la comisión del comercial.
-                    </p>
-                  </div>
+                <div className="space-y-2">
+                  <Label htmlFor="discountEndsAt" className="text-xs">
+                    Oferta activa hasta{" "}
+                    <span className="text-muted-foreground">
+                      (vacío = sin límite)
+                    </span>
+                  </Label>
+                  <Input
+                    id="discountEndsAt"
+                    name="discountEndsAt"
+                    type="datetime-local"
+                    defaultValue={toDatetimeLocal(landing.discountEndsAt ?? null)}
+                  />
                 </div>
               </div>
 
-              {/* ── Tokens (suscripción de consumo) ── */}
-              <div className="rounded-lg border border-border p-4 space-y-4">
-                <div className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-                  Tokens · suscripción de consumo
+              <div className="rounded-lg border border-border p-4 space-y-3">
+                <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                  Descuento (opcional)
+                </p>
+                <div className="grid sm:grid-cols-3 gap-4 items-end">
+                  <div className="space-y-2">
+                    <Label className="text-xs">Tipo</Label>
+                    <select
+                      name="feeDiscountType"
+                      defaultValue={isPercent ? "PERCENT" : "ABSOLUTE"}
+                      className="h-9 w-full rounded-md border border-border bg-background px-2 text-sm"
+                    >
+                      <option value="ABSOLUTE">Precio final (€)</option>
+                      <option value="PERCENT">Porcentaje (%)</option>
+                    </select>
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="firstYearPrice" className="text-xs">
+                      Si tipo €: precio final
+                    </Label>
+                    <Input
+                      id="firstYearPrice"
+                      name="firstYearPrice"
+                      type="number"
+                      min="0"
+                      step="0.01"
+                      defaultValue={firstYearEuros}
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="discountPercent" className="text-xs">
+                      Si tipo %: descuento
+                    </Label>
+                    <Input
+                      id="discountPercent"
+                      name="discountPercent"
+                      type="number"
+                      min="0"
+                      max="100"
+                      step="1"
+                      defaultValue={percentValue}
+                    />
+                  </div>
                 </div>
-                <div className="grid sm:grid-cols-2 gap-4">
-                  <div className="space-y-2">
-                    <Label htmlFor="tokenMonthlyPrice" className="text-xs">
-                      Precio de tokens (€ / mes)
-                    </Label>
-                    <Input
-                      id="tokenMonthlyPrice"
-                      name="tokenMonthlyPrice"
-                      type="number"
-                      min="0"
-                      step="0.01"
-                      defaultValue={tokenMonthlyEuros}
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="tokenMonthlyPriceAnnual" className="text-xs">
-                      Con pago anual (€ / mes)
-                    </Label>
-                    <Input
-                      id="tokenMonthlyPriceAnnual"
-                      name="tokenMonthlyPriceAnnual"
-                      type="number"
-                      min="0"
-                      step="0.01"
-                      defaultValue={tokenAnnualEuros}
-                    />
-                    <p className="text-[11px] text-muted-foreground">
-                      Pronto pago: si el cliente paga el año entero. Debe ser
-                      ≤ que el precio estándar.
-                    </p>
-                  </div>
+                <p className="text-[11px] text-muted-foreground">
+                  Se aplica el campo del tipo elegido. Sin descuento: deja el
+                  precio final igual al precio anual. El descuento baja también
+                  la base de comisión.
+                </p>
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* ── 3 · Tokens ── */}
+          <Card className="card-paper">
+            <CardHeader className="pb-3">
+              <CardTitle className="text-base">3 · Tokens (consumo de IA)</CardTitle>
+              <CardDescription>
+                Componente de IA del plan Todo incluido. La cuota del cliente =
+                (software + tokens×12) ÷ pagos del periodo.
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-5">
+              <div className="grid sm:grid-cols-2 gap-5">
+                <div className="space-y-2">
+                  <Label htmlFor="tokenMonthlyPrice" className="text-xs">
+                    Precio estándar (€ / mes)
+                  </Label>
+                  <Input
+                    id="tokenMonthlyPrice"
+                    name="tokenMonthlyPrice"
+                    type="number"
+                    min="0"
+                    step="0.01"
+                    defaultValue={tokenMonthlyEuros}
+                  />
                 </div>
                 <div className="space-y-2">
-                  <Label className="text-xs">Periodos ofrecidos al cliente</Label>
-                  <div className="flex flex-wrap gap-4">
-                    {TOKEN_PERIODS_ORDER.map((p) => (
-                      <label
-                        key={p}
-                        className="flex items-center gap-2 cursor-pointer text-sm"
-                      >
-                        <input
-                          type="checkbox"
-                          name={`period_${p}`}
-                          value="1"
-                          defaultChecked={offeredPeriods.has(p)}
-                          className="accent-violet-600 h-4 w-4"
-                        />
-                        <span>
-                          {TOKEN_PERIOD_LABEL[p]}{" "}
-                          <span className="text-muted-foreground">
-                            (×{TOKEN_PERIOD_MONTHS[p]})
-                          </span>
-                        </span>
-                      </label>
-                    ))}
-                  </div>
+                  <Label htmlFor="tokenMonthlyPriceAnnual" className="text-xs">
+                    Con pago anual (€ / mes)
+                  </Label>
+                  <Input
+                    id="tokenMonthlyPriceAnnual"
+                    name="tokenMonthlyPriceAnnual"
+                    type="number"
+                    min="0"
+                    step="0.01"
+                    defaultValue={tokenAnnualEuros}
+                  />
                   <p className="text-[11px] text-muted-foreground">
-                    Precio de cada periodo = precio mensual × meses. Debe haber
-                    al menos uno.
+                    Pronto pago si el cliente paga el año entero (≤ estándar).
                   </p>
                 </div>
               </div>
 
-              {/* Fin del descuento */}
               <div className="space-y-2">
-                <Label htmlFor="discountEndsAt" className="text-xs">
-                  Descuento activo hasta{" "}
-                  <span className="text-muted-foreground">
-                    (vacío = sin límite)
-                  </span>
-                </Label>
-                <Input
-                  id="discountEndsAt"
-                  name="discountEndsAt"
-                  type="datetime-local"
-                  defaultValue={toDatetimeLocal(landing?.discountEndsAt ?? null)}
-                />
+                <Label className="text-xs">Periodos de pago ofrecidos</Label>
+                <div className="flex flex-wrap gap-4">
+                  {TOKEN_PERIODS_ORDER.map((p) => (
+                    <label
+                      key={p}
+                      className="flex items-center gap-2 cursor-pointer text-sm"
+                    >
+                      <input
+                        type="checkbox"
+                        name={`period_${p}`}
+                        value="1"
+                        defaultChecked={offeredPeriods.has(p)}
+                        className="accent-violet-600 h-4 w-4"
+                      />
+                      <span>
+                        {TOKEN_PERIOD_LABEL[p]}{" "}
+                        <span className="text-muted-foreground">
+                          (×{TOKEN_PERIOD_MONTHS[p]})
+                        </span>
+                      </span>
+                    </label>
+                  ))}
+                </div>
+                <p className="text-[11px] text-muted-foreground">
+                  Debe haber al menos uno.
+                </p>
               </div>
+            </CardContent>
+          </Card>
 
-              {/* Activa */}
+          {/* ── 4 · Publicación ── */}
+          <Card className="card-paper">
+            <CardHeader className="pb-3">
+              <CardTitle className="text-base">4 · Publicación</CardTitle>
+            </CardHeader>
+            <CardContent className="flex items-center justify-between gap-4 flex-wrap">
               <label className="flex items-center gap-3 cursor-pointer">
                 <input
                   type="checkbox"
                   name="isActive"
                   value="1"
-                  defaultChecked={landing?.isActive ?? true}
+                  defaultChecked={landing.isActive}
                   className="accent-violet-600 h-4 w-4"
                 />
-                <span className="text-sm">Landing activa (visible al público)</span>
+                <span className="text-sm">
+                  Landing activa{" "}
+                  <span className="text-muted-foreground">
+                    (visible al público; desactívala para pausar la venta)
+                  </span>
+                </span>
               </label>
-
               <Button
                 type="submit"
                 style={{
@@ -391,9 +469,9 @@ export default async function EmpresaLandingPage() {
               >
                 Guardar cambios
               </Button>
-            </form>
-          </CardContent>
-        </Card>
+            </CardContent>
+          </Card>
+        </form>
       </div>
     </EmpresaShell>
   );
