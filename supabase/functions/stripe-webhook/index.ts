@@ -188,14 +188,22 @@ async function handleCheckoutCompleted(session: Stripe.Checkout.Session) {
 
   // ── Crear/actualizar usuario FIRM_ADMIN ──────────────────────────────────
   // No usamos upsert: sobrescribiría el id del usuario existente y rompería FKs.
+  // Si el usuario queda sin contraseña, generamos un token de activación de un
+  // solo uso (7 días) que viaja en el email de licencia (/activar?token=) —
+  // change buyer-account-activation. Solo se persiste el hash SHA-256.
+  let activationToken: string | null = null;
   if (buyerEmail) {
     const { data: existingUser } = await db
       .from("User")
-      .select("id")
+      .select("id, passwordHash")
       .eq("email", buyerEmail)
       .maybeSingle();
 
+    let userId: string;
+    let hasPassword = false;
     if (existingUser) {
+      userId = existingUser.id;
+      hasPassword = !!existingUser.passwordHash;
       await db
         .from("User")
         .update({
@@ -207,8 +215,9 @@ async function handleCheckoutCompleted(session: Stripe.Checkout.Session) {
         })
         .eq("id", existingUser.id);
     } else {
+      userId = crypto.randomUUID();
       await db.from("User").insert({
-        id: crypto.randomUUID(),
+        id: userId,
         email: buyerEmail,
         name: buyerName,
         role: "FIRM_ADMIN",
@@ -216,6 +225,39 @@ async function handleCheckoutCompleted(session: Stripe.Checkout.Session) {
         emailVerified: now,
         updatedAt: now,
       });
+    }
+
+    if (!hasPassword) {
+      try {
+        const raw = crypto.getRandomValues(new Uint8Array(32));
+        activationToken = btoa(String.fromCharCode(...raw))
+          .replace(/\+/g, "-")
+          .replace(/\//g, "_")
+          .replace(/=+$/, "");
+        const digest = await crypto.subtle.digest(
+          "SHA-256",
+          new TextEncoder().encode(activationToken),
+        );
+        const tokenHash = Array.from(new Uint8Array(digest))
+          .map((b) => b.toString(16).padStart(2, "0"))
+          .join("");
+        const { error: tokenErr } = await db.from("AccountSetupToken").insert({
+          id: crypto.randomUUID(),
+          userId,
+          tokenHash,
+          expiresAt: new Date(Date.now() + 7 * 24 * 3600_000).toISOString(),
+        });
+        if (tokenErr) {
+          console.error(
+            "[stripe-webhook] insert AccountSetupToken falló:",
+            tokenErr.message,
+          );
+          activationToken = null; // email sin bloque de cuenta; /activar permite reenviar
+        }
+      } catch (err) {
+        console.error("[stripe-webhook] Error generando token de activación:", err);
+        activationToken = null;
+      }
     }
   }
 
@@ -308,6 +350,7 @@ async function handleCheckoutCompleted(session: Stripe.Checkout.Session) {
       to: buyerEmail,
       name: buyerName,
       code: pairingCode,
+      activationToken,
     });
   }
 
@@ -437,6 +480,9 @@ async function sendWelcomeEmail(opts: {
   to: string;
   name: string | null;
   code: string;
+  // Token de activación de cuenta (null si el usuario ya tiene contraseña o
+  // si no se pudo generar — el bloque simplemente se omite del email).
+  activationToken: string | null;
 }) {
   const apiKey = Deno.env.get("RESEND_API_KEY");
   if (!apiKey) {
@@ -470,6 +516,26 @@ async function sendWelcomeEmail(opts: {
     <p style="margin:0;font-size:24px;font-weight:700;font-family:ui-monospace,Consolas,monospace;letter-spacing:.1em">${opts.code}</p>
     <p style="margin:8px 0 0;font-size:12px;color:#888">Válido durante 7 días. Si caduca, escríbenos y te enviamos uno nuevo.</p>
   </div>
+  ${
+    opts.activationToken
+      ? `
+  <div style="background:#0c2b3d;border-radius:10px;padding:18px 20px;margin:20px 0;color:#f5efe4">
+    <p style="margin:0 0 4px;font-size:12px;text-transform:uppercase;letter-spacing:.05em;color:#c9c2ae">Tu cuenta de cliente</p>
+    <p style="margin:0 0 12px;font-size:14px;line-height:1.6">
+      Desde tu portal puedes recuperar el código, ver tu consumo y gestionar
+      tu suscripción. Crea tu contraseña para acceder:
+    </p>
+    <a href="${Deno.env.get("APP_URL") ?? "https://ia-suite-chi.vercel.app"}/activar?token=${opts.activationToken}"
+       style="display:inline-block;background:#f2c94c;color:#082130;text-decoration:none;padding:11px 22px;border-radius:8px;font-weight:600;font-size:14px">
+      Activa tu cuenta
+    </a>
+    <p style="margin:12px 0 0;font-size:12px;color:#c9c2ae">
+      El enlace caduca en 7 días y es de un solo uso. Nunca te pediremos tu
+      contraseña por email.
+    </p>
+  </div>`
+      : ""
+  }
   <p style="color:#555;line-height:1.6;font-size:14px">
     ¿Dudas? Responde a este email y te ayudamos con la instalación.
   </p>

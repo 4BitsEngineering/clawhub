@@ -33,8 +33,29 @@ model User {
   accounts Account[]
   sessions Session[]
   salesRep  SalesRep?
+  setupTokens AccountSetupToken[]
 
   @@index([firmId])
+}
+
+/**
+ * Token de activación de cuenta (change buyer-account-activation): el webhook
+ * lo genera al crear el FIRM_ADMIN de una compra sin contraseña y lo incluye
+ * en el email de licencia (/activar?token=). Un solo uso, caduca a los 7 días,
+ * solo se persiste el hash SHA-256 (mismo patrón que instance tokens).
+ * El id lo suministra el cliente (webhook Deno usa crypto.randomUUID —
+ * @default(uuid) de Prisma es client-side, no DB-level).
+ */
+model AccountSetupToken {
+  id        String    @id @default(uuid())
+  userId    String
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  tokenHash String    @unique
+  expiresAt DateTime
+  usedAt    DateTime?
+  createdAt DateTime  @default(now())
+
+  @@index([userId])
 }
 
 model Account {

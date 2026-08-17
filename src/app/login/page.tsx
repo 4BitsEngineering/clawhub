@@ -97,10 +97,11 @@ async function devLoginAction(formData: FormData) {
 export default async function LoginPage({
   searchParams,
 }: {
-  searchParams: Promise<{ sent?: string; error?: string }>;
+  searchParams: Promise<{ sent?: string; error?: string; activated?: string }>;
 }) {
   const params = await searchParams;
   const sent = params?.sent === "1";
+  const activated = params?.activated === "1";
   const credError = params?.error === "cred";
   const devEnabled = process.env.DEV_AUTH_ENABLED === "true";
 
@@ -131,6 +132,20 @@ export default async function LoginPage({
             Accede a tu panel de AI&nbsp;Office.
           </p>
         </div>
+
+        {/* Cuenta recién activada (/activar) */}
+        {activated && (
+          <div
+            className="rounded-xl px-5 py-4 text-sm text-center"
+            style={{
+              backgroundColor: "rgba(242,201,76,0.15)",
+              color: "#f5efe4",
+              border: "1px solid rgba(242,201,76,0.4)",
+            }}
+          >
+            ✓ Cuenta activada. Entra con tu email y tu nueva contraseña.
+          </div>
+        )}
 
         {/* Aviso de magic link enviado (flujo de invitaciones) */}
         {sent && (
@@ -204,7 +219,11 @@ export default async function LoginPage({
               </Button>
             </form>
             <p className="text-xs text-center" style={{ color: "#8a8574" }}>
-              ¿Has olvidado tu contraseña? Escríbenos a{" "}
+              ¿Primera vez?{" "}
+              <a href="/activar" className="underline font-semibold">
+                Activa tu cuenta
+              </a>{" "}
+              · ¿Has olvidado tu contraseña? Escríbenos a{" "}
               <a href="mailto:info@iaofi.com" className="underline font-semibold">
                 info@iaofi.com
               </a>
