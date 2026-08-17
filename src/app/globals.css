@@ -162,6 +162,10 @@
   content: ".";
   color: #f2c94c;
 }
+/* Excepción: titulares que ya terminan en signo (¡…!) no llevan el punto */
+.aio-canvas h1.aio-no-dot::after {
+  content: none;
+}
 
 /* Dentro de las tarjetas: crema con texto oscuro (como el portal del cliente) */
 .aio-canvas .card-paper,

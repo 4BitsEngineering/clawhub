@@ -47,21 +47,17 @@ export default async function SuccessPage({
   }
 
   return (
-    <main className="min-h-screen bg-background flex items-center justify-center px-6">
-      <div
-        aria-hidden
-        className="pointer-events-none fixed inset-x-0 top-0 h-[500px] opacity-40"
-        style={{
-          background:
-            "radial-gradient(ellipse 80% 60% at 50% -10%, hsl(var(--brand) / 0.3), transparent)",
-        }}
-      />
-
+    <main className="aio-canvas min-h-screen flex items-center justify-center px-6">
       <div className="relative max-w-lg w-full text-center space-y-8">
-        <div className="space-y-3">
+        <div className="space-y-4">
           <div className="text-5xl">🎉</div>
-          <div className="eyebrow-chip mx-auto w-fit">AI-Office</div>
-          <h1 className="font-display text-3xl sm:text-4xl font-bold tracking-tight">
+          <span
+            className="inline-block text-[11px] px-3 py-1 rounded-full font-bold uppercase tracking-[0.14em]"
+            style={{ backgroundColor: "#f2c94c", color: "#082130" }}
+          >
+            AI Office
+          </span>
+          <h1 className="aio-no-dot text-3xl sm:text-4xl font-bold tracking-tight">
             {buyerName ? `¡Gracias, ${buyerName.split(" ")[0]}!` : "¡Gracias por tu compra!"}
           </h1>
           <p className="text-muted-foreground">

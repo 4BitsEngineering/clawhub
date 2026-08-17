@@ -174,22 +174,17 @@ export default async function LandingPublicPage({
   });
 
   return (
-    <main className="min-h-screen bg-background">
-      {/* Spotlight superior */}
-      <div
-        aria-hidden
-        className="pointer-events-none fixed inset-x-0 top-0 h-[500px] opacity-40"
-        style={{
-          background:
-            "radial-gradient(ellipse 80% 60% at 50% -10%, hsl(var(--brand) / 0.3), transparent)",
-        }}
-      />
-
+    <main className="aio-canvas min-h-screen">
       <div className="relative max-w-3xl mx-auto px-6 py-20 space-y-14">
         {/* ── Cabecera ── */}
-        <header className="text-center space-y-4">
-          <div className="eyebrow-chip mx-auto w-fit">AI-Office</div>
-          <h1 className="font-display text-4xl sm:text-5xl font-bold tracking-tight leading-tight">
+        <header className="text-center space-y-5">
+          <span
+            className="inline-block text-[11px] px-3 py-1 rounded-full font-bold uppercase tracking-[0.14em]"
+            style={{ backgroundColor: "#f2c94c", color: "#082130" }}
+          >
+            AI Office
+          </span>
+          <h1 className="text-4xl sm:text-5xl font-bold tracking-tight leading-tight">
             {landing.headline}
           </h1>
         </header>
@@ -225,8 +220,8 @@ export default async function LandingPublicPage({
             {/* ── Modalidad 1: Todo incluido (recomendado) ── */}
             <div className="card-paper rounded-2xl p-7 space-y-5 shadow-xl border-2 border-[var(--brand)]/40 relative">
               <span
-                className="absolute -top-3 left-6 text-[11px] font-bold uppercase tracking-wider px-2.5 py-0.5 rounded-full text-white"
-                style={{ backgroundColor: "var(--brand)" }}
+                className="absolute -top-3 left-6 text-[11px] font-bold uppercase tracking-wider px-2.5 py-0.5 rounded-full"
+                style={{ backgroundColor: "#f2c94c", color: "#082130" }}
               >
                 Recomendado
               </span>
