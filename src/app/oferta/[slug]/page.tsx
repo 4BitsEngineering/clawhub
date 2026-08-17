@@ -1,18 +1,15 @@
 import { notFound, redirect } from "next/navigation";
 import { after } from "next/server";
 import { cookies } from "next/headers";
-import type Stripe from "stripe";
 import { db } from "@/lib/db";
-import { stripe, ANNUAL_LICENSE_NAME, ANNUAL_LICENSE_DESC } from "@/lib/stripe";
+import { stripe } from "@/lib/stripe";
+import { createUnifiedCheckout } from "@/lib/checkout";
 import {
   TOKEN_PERIODS_ORDER,
   TOKEN_PERIOD_LABEL,
-  tokenStripeInterval,
   effectiveFirstYearFeeCents,
-  tokenAnnualComponentCents,
   bundledAnnualTotalCents,
   periodInstallmentCents,
-  PERIOD_PAYMENTS_PER_YEAR,
   fmtEuros,
 } from "@/lib/pricing";
 import type { TokenBillingPeriod } from "@/generated/prisma/client";
@@ -43,7 +40,6 @@ export default async function LandingPublicPage({
   if (!landing || !landing.isActive) notFound();
 
   const stripeEnabled = !!stripe;
-  const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000";
 
   async function checkoutAction(formData: FormData) {
     "use server";
@@ -60,79 +56,22 @@ export default async function LandingPublicPage({
     const customerEmail = formEmail || (await emailFromAttribution()) || null;
     if (!customerEmail) return;
 
-    const lp = await db.landingPage.findUnique({ where: { slug } });
-    if (!lp) return;
-
-    // Modalidad: BUNDLED (precio unificado software+tokens) o EXTERNAL
-    // (el cliente trae su proveedor LLM → solo software, anual).
+    // Checkout unificado compartido (src/lib/checkout.ts). Modalidad BUNDLED
+    // (cuota software+tokens) o EXTERNAL (solo software, anual).
     const provision =
       formData.get("tokenProvision") === "EXTERNAL" ? "EXTERNAL" : "BUNDLED";
+    const period =
+      (formData.get("tokenPeriod") as TokenBillingPeriod | null) ?? null;
 
-    const currency = lp.currency.toLowerCase();
-    const softwareCents = effectiveFirstYearFeeCents(lp); // base de comisión
-
-    let unitAmount: number;
-    let interval: { interval: "month" | "year"; interval_count: number };
-    let productName: string;
-    let period: TokenBillingPeriod | null = null;
-    let tokenAnnualCents: number | null = null;
-
-    if (provision === "BUNDLED") {
-      // Periodo elegido — debe estar entre los ofrecidos por el admin.
-      const p = formData.get("tokenPeriod") as TokenBillingPeriod | null;
-      if (!p || !lp.tokenPeriods.includes(p)) return;
-      period = p;
-      tokenAnnualCents = tokenAnnualComponentCents(lp, p);
-      // Cuota unificada del periodo: (software efectivo + tokens año) / pagos
-      unitAmount = periodInstallmentCents(bundledAnnualTotalCents(lp, p), p);
-      interval = tokenStripeInterval(p);
-      productName = `AI-Office · Todo incluido (${TOKEN_PERIOD_LABEL[p]})`;
-    } else {
-      // Solo software, facturación anual.
-      unitAmount = softwareCents;
-      interval = { interval: "year", interval_count: 1 };
-      productName = `${ANNUAL_LICENSE_NAME} · Proveedor de IA propio`;
-    }
-
-    const session = await stripe.checkout.sessions.create({
-      mode: "subscription",
-      // Tarjeta; Managed Payments desactivado para cobrar el importe anunciado
-      // sin que Stripe añada IVA por encima (el IVA lo facturamos nosotros).
-      payment_method_types: ["card"],
-      managed_payments: { enabled: false },
-      // Cupones: el cliente puede introducir un código promocional de Stripe.
-      // El descuento lo aplica Stripe sobre la cuota; NO altera feeAmountCents
-      // (la base de comisión) — los descuentos que deben bajar la comisión se
-      // configuran en el panel (descuento del software).
-      allow_promotion_codes: true,
-      line_items: [
-        {
-          price_data: {
-            currency,
-            product_data: { name: productName, description: ANNUAL_LICENSE_DESC },
-            unit_amount: unitAmount,
-            recurring: {
-              interval: interval.interval,
-              interval_count: interval.interval_count,
-            },
-          },
-          quantity: 1,
-        },
-      ],
-      metadata: {
-        trackingToken: attribution ?? "",
-        landingSlug: slug,
-        tokenProvision: provision,
-        feeAmountCents: String(softwareCents),
-        tokenBillingPeriod: period ?? "",
-        tokenAmountCents: tokenAnnualCents != null ? String(tokenAnnualCents) : "",
-      },
-      customer_email: customerEmail,
-      success_url: `${appUrl}/oferta/${slug}/success?session_id={CHECKOUT_SESSION_ID}`,
-      cancel_url: `${appUrl}/oferta/${slug}`,
-    } as Stripe.Checkout.SessionCreateParams);
-
-    if (session.url) redirect(session.url);
+    const url = await createUnifiedCheckout({
+      slug,
+      provision,
+      period,
+      email: customerEmail,
+      trackingToken: attribution,
+      houseSale: false,
+    });
+    if (url) redirect(url);
   }
 
   // Si llegó por link de campaña, ya sabemos quién es → precargar su email

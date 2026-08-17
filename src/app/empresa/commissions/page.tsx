@@ -219,7 +219,8 @@ export default async function EmpresaCommissionsPage({
   const [unattributed, activeReps] = isOperator
     ? await Promise.all([
         db.purchase.findMany({
-          where: { status: "COMPLETED", commission: { is: null } },
+          // Las ventas de la casa (houseSale) no se atribuyen a comerciales.
+          where: { status: "COMPLETED", commission: { is: null }, houseSale: false },
           select: {
             id: true,
             amountCents: true,

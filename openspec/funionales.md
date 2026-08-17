@@ -146,6 +146,17 @@ Acceso: rol `FIRM_ADMIN` (el comprador de AI-Office; se crea automáticamente al
 
 ---
 
+## Landing raíz (venta de la casa) — change `root-sales-landing`
+
+**URL:** `/` (iaofi.com)
+
+- Visitantes **anónimos** ven la landing de venta completa con la identidad AI-Office: hero, equipo de 11 especialistas IA, cómo funciona, precios (mismas modalidades y cuotas que `/oferta`), FAQ y contacto. Usuarios con sesión van a su panel.
+- **Compra directa = venta de la casa**: `Purchase.houseSale = true`, sin comercial → sin comisión y **excluida de "Compras sin atribuir"**. Los ingresos cuentan igual en `/empresa`.
+- Los precios y el headline/vídeo salen de la misma configuración del panel (`/empresa/landing`).
+- Checkout compartido en `src/lib/checkout.ts` (una sola verdad para `/` y `/oferta`).
+
+---
+
 ## Landing pública de venta
 
 **URL:** `/oferta/ai-office`

@@ -102,6 +102,9 @@ async function handleCheckoutCompleted(session: Stripe.Checkout.Session) {
   // Su presencia marca que la compra es del modelo de UNA sola suscripción
   // (la cuota ya prorratea el software) — no se crea la 2ª sub del fee.
   const tokenProvision = (meta.tokenProvision as string | undefined) || null;
+  // Venta de la casa (landing raíz, sin comercial): sin comisión y excluida
+  // de la atribución manual.
+  const houseSale = meta.houseSale === "1";
 
   // Suscripción de tokens creada por el checkout, y el customer para anclar la
   // segunda suscripción (renovación anual del fee).
@@ -234,6 +237,7 @@ async function handleCheckoutCompleted(session: Stripe.Checkout.Session) {
       tokenBillingPeriod,
       tokenAmountCents,
       tokenProvision,
+      houseSale,
       stripeSubscriptionId: tokenSubscriptionId,
       stripeFeeSubscriptionId: feeSubscriptionId,
       currency,

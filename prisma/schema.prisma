@@ -997,6 +997,9 @@ model Purchase {
   // Modalidad de tokens (modelo unificado): BUNDLED = incluidos con nosotros;
   // EXTERNAL = el cliente usa su propio proveedor LLM (solo software, anual).
   tokenProvision      TokenProvision?
+  // Venta de la casa (landing raíz, sin comercial): sin comisión y excluida
+  // de la atribución manual en /empresa/commissions.
+  houseSale           Boolean       @default(false)
   stripeSubscriptionId    String?   // suscripción de tokens
   stripeFeeSubscriptionId String?   // suscripción de renovación anual del fee
   currency            String        @default("EUR")
