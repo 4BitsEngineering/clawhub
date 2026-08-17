@@ -62,7 +62,10 @@
     "defaults": {
       "model": {
         "primary": "minimax/MiniMax-M3",
-        "fallbacks": ["minimax/MiniMax-M2.7", "ollama/gemma4-gpu"]
+        "fallbacks": [
+          "minimax/MiniMax-M2.7",
+          "ollama/gemma4-gpu"
+        ]
       },
       "models": {
         "minimax/MiniMax-M3": {
@@ -98,7 +101,9 @@
         "maxConcurrent": 8,
         "runTimeoutSeconds": 1800,
         "archiveAfterMinutes": 60,
-        "allowAgents": ["*"],
+        "allowAgents": [
+          "*"
+        ],
         "delegationMode": "prefer"
       },
       "params": {
@@ -112,46 +117,30 @@
       "maxConcurrent": 6,
       "imageGenerationModel": {
         "primary": "minimax/image-01",
-        "fallbacks": ["minimax-portal/image-01"],
+        "fallbacks": [
+          "minimax-portal/image-01"
+        ],
         "timeoutMs": 180000
       },
       "skipBootstrap": true
     },
     "list": []
   },
-  "messages": {
-    "tts": {
-      "auto": "tagged",
-      "modelOverrides": {
-        "enabled": false
-      },
-      "provider": "minimax",
-      "providers": {
-        "elevenlabs": {
-          "apiKey": {
-            "source": "exec",
-            "provider": "bridge_tokens",
-            "id": "service:elevenlabs"
-          },
-          "voiceId": "1eHrpOW5l98cxiSRjbzJ",
-          "languageCode": "es"
-        },
-        "minimax": {
-          "apiKey": "${MINIMAX_API_KEY}",
-          "baseUrl": "https://api.minimax.io",
-          "model": "speech-2.6-turbo",
-          "voiceId": "Spanish_SereneWoman",
-          "speed": 1,
-          "vol": 1,
-          "pitch": 0
-        }
-      }
-    }
-  },
+  "messages": {},
   "tools": {
     "profile": "coding",
-    "alsoAllow": ["message", "tts", "exec"],
-    "deny": ["code_execution", "cron", "gateway", "nodes", "update_plan"],
+    "alsoAllow": [
+      "message",
+      "tts",
+      "exec"
+    ],
+    "deny": [
+      "code_execution",
+      "cron",
+      "gateway",
+      "nodes",
+      "update_plan"
+    ],
     "web": {
       "search": {
         "enabled": true
@@ -235,16 +224,7 @@
         "enabled": true
       },
       "brave": {
-        "enabled": true,
-        "config": {
-          "webSearch": {
-            "apiKey": {
-              "source": "exec",
-              "provider": "bridge_tokens",
-              "id": "service:brave"
-            }
-          }
-        }
+        "enabled": false
       },
       "openai": {
         "enabled": true
@@ -258,14 +238,9 @@
         }
       },
       "n8n": {
-        "enabled": true,
+        "enabled": false,
         "config": {
-          "baseUrl": "",
-          "apiKey": {
-            "source": "exec",
-            "provider": "bridge_tokens",
-            "id": "service:n8n"
-          }
+          "baseUrl": ""
         }
       },
       "browser": {
@@ -504,7 +479,10 @@
             "id": "gemma4-gpu",
             "name": "Gemma 4 GPU (Ollama local)",
             "reasoning": false,
-            "input": ["text", "image"],
+            "input": [
+              "text",
+              "image"
+            ],
             "cost": {
               "input": 0,
               "output": 0,
@@ -518,7 +496,10 @@
             "id": "gemma4-assistant",
             "name": "Gemma 4 (Ollama local)",
             "reasoning": false,
-            "input": ["text", "image"],
+            "input": [
+              "text",
+              "image"
+            ],
             "cost": {
               "input": 0,
               "output": 0,
@@ -532,7 +513,9 @@
             "id": "qwen2.5-coder:7b",
             "name": "Qwen 2.5 Coder 7B (Ollama local, tools-capable)",
             "reasoning": false,
-            "input": ["text"],
+            "input": [
+              "text"
+            ],
             "cost": {
               "input": 0,
               "output": 0,
@@ -546,7 +529,9 @@
             "id": "qwen2.5-coder:14b",
             "name": "Qwen 2.5 Coder 14B (Ollama local, tools-capable)",
             "reasoning": false,
-            "input": ["text"],
+            "input": [
+              "text"
+            ],
             "cost": {
               "input": 0,
               "output": 0,
@@ -560,7 +545,9 @@
             "id": "minimax-m2:cloud",
             "name": "MiniMax M2 (Ollama cloud, tool_calls native)",
             "reasoning": true,
-            "input": ["text"],
+            "input": [
+              "text"
+            ],
             "cost": {
               "input": 0,
               "output": 0,
@@ -584,7 +571,10 @@
             "compat": {
               "supportsPromptCacheKey": true
             },
-            "input": ["text", "image"],
+            "input": [
+              "text",
+              "image"
+            ],
             "cost": {
               "input": 0,
               "output": 0,
@@ -601,7 +591,10 @@
             "compat": {
               "supportsPromptCacheKey": true
             },
-            "input": ["text", "image"],
+            "input": [
+              "text",
+              "image"
+            ],
             "cost": {
               "input": 0,
               "output": 0,
@@ -629,7 +622,10 @@
   "browser": {
     "ssrfPolicy": {
       "dangerouslyAllowPrivateNetwork": false,
-      "allowedHostnames": ["localhost", "127.0.0.1"]
+      "allowedHostnames": [
+        "localhost",
+        "127.0.0.1"
+      ]
     },
     "enabled": true
   },
