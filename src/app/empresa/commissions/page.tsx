@@ -3,6 +3,7 @@ import { revalidatePath } from "next/cache";
 import { requireEmpresa, requireOperator } from "@/lib/session";
 import { EmpresaShell } from "@/components/empresa-shell";
 import { db } from "@/lib/db";
+import { resolveTeam } from "@/lib/agent-catalog";
 import type { CommissionStatus } from "@/generated/prisma/client";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -228,6 +229,7 @@ export default async function EmpresaCommissionsPage({
             completedAt: true,
             buyerName: true,
             buyerEmail: true,
+            selectedAgents: true,
           },
           orderBy: { completedAt: "desc" },
         }),
@@ -358,6 +360,18 @@ export default async function EmpresaCommissionsPage({
                               {p.buyerEmail}
                             </div>
                           )}
+                          <div
+                            className="text-[11px] text-muted-foreground mt-0.5"
+                            title={resolveTeam(p.selectedAgents)
+                              .map((a) => a.displayName)
+                              .join(", ")}
+                          >
+                            {p.selectedAgents.length === 0
+                              ? "Equipo completo"
+                              : `Equipo: ${resolveTeam(p.selectedAgents)
+                                  .map((a) => a.icon)
+                                  .join(" ")}`}
+                          </div>
                         </TableCell>
                         <TableCell className="tabular-nums font-medium">
                           {fmt(p.feeAmountCents ?? p.amountCents)}

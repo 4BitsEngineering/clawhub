@@ -105,6 +105,13 @@ async function handleCheckoutCompleted(session: Stripe.Checkout.Session) {
   // Venta de la casa (landing raíz, sin comercial): sin comisión y excluida
   // de la atribución manual.
   const houseSale = meta.houseSale === "1";
+  // Equipo elegido antes del pago (agent-selection-before-checkout): ids con
+  // coma; "" o ausente = catálogo completo. Validado ya en el checkout; el
+  // pair vuelve a intersectar con el catálogo por defensa.
+  const selectedAgents = ((meta.selectedAgents as string | undefined) || "")
+    .split(",")
+    .map((s) => s.trim())
+    .filter(Boolean);
 
   // Suscripción de tokens creada por el checkout, y el customer para anclar la
   // segunda suscripción (renovación anual del fee).
@@ -241,6 +248,7 @@ async function handleCheckoutCompleted(session: Stripe.Checkout.Session) {
       tokenAmountCents,
       tokenProvision,
       houseSale,
+      selectedAgents,
       stripeSubscriptionId: tokenSubscriptionId,
       stripeFeeSubscriptionId: feeSubscriptionId,
       currency,

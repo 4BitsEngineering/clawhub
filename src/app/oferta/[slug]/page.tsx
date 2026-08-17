@@ -12,8 +12,10 @@ import {
   periodInstallmentCents,
   fmtEuros,
 } from "@/lib/pricing";
+import { selectionFromFormData } from "@/lib/agent-catalog";
 import type { TokenBillingPeriod } from "@/generated/prisma/client";
 import { CountdownTimer } from "@/components/countdown-timer";
+import { AgentPicker } from "@/components/agent-picker";
 
 // Email del prospect si llegó por un link de tracking de campaña
 async function emailFromAttribution(): Promise<string | null> {
@@ -70,6 +72,7 @@ export default async function LandingPublicPage({
       email: customerEmail,
       trackingToken: attribution,
       houseSale: false,
+      selectedAgents: selectionFromFormData(formData),
     });
     if (url) redirect(url);
   }
@@ -155,129 +158,136 @@ export default async function LandingPublicPage({
         )}
 
         {stripeEnabled ? (
-          <div className="grid md:grid-cols-2 gap-6 items-start">
-            {/* ── Modalidad 1: Todo incluido (recomendado) ── */}
-            <div className="card-paper rounded-2xl p-7 space-y-5 shadow-xl border-2 border-[var(--brand)]/40 relative">
-              <span
-                className="absolute -top-3 left-6 text-[11px] font-bold uppercase tracking-wider px-2.5 py-0.5 rounded-full"
-                style={{ backgroundColor: "#f2c94c", color: "#082130" }}
-              >
-                Recomendado
-              </span>
-              <div className="space-y-1 pt-1">
-                <h2 className="text-xl font-bold">Todo incluido</h2>
-                <p className="text-sm text-muted-foreground">
-                  Software + consumo de IA en una sola cuota. Sin
-                  configuraciones: instalas y funciona.
+          <form action={checkoutAction} className="space-y-10">
+            {/* ── Elige tu equipo ── */}
+            <section className="space-y-4">
+              <div className="text-center space-y-1">
+                <h2 className="text-2xl font-bold" style={{ fontFamily: "Georgia, serif" }}>
+                  Elige tu equipo<span style={{ color: "#f2c94c" }}>.</span>
+                </h2>
+                <p className="text-sm" style={{ color: "rgba(245,239,228,0.75)" }}>
+                  Marca los especialistas que necesita tu negocio. El precio no
+                  cambia por el número de especialistas.
                 </p>
               </div>
+              <AgentPicker />
+            </section>
 
-              {offered.length > 0 ? (
-                <form action={checkoutAction} className="space-y-4">
-                  <input type="hidden" name="tokenProvision" value="BUNDLED" />
-                  <div className="grid gap-2">
-                    {offered.map((o, i) => (
-                      <label
-                        key={o.period}
-                        className="flex items-center justify-between gap-3 rounded-xl border border-border px-4 py-3 cursor-pointer hover:bg-muted/20 transition-colors has-[:checked]:border-[var(--brand)] has-[:checked]:bg-[var(--brand)]/5"
-                      >
-                        <span className="flex items-center gap-3">
-                          <input
-                            type="radio"
-                            name="tokenPeriod"
-                            value={o.period}
-                            required
-                            defaultChecked={i === 0}
-                            className="accent-[var(--brand)] h-4 w-4"
-                          />
-                          <span className="text-sm font-medium">{o.label}</span>
-                        </span>
-                        <span className="text-sm tabular-nums text-right">
-                          <span className="font-semibold">
-                            {fmtEuros(o.installment)}
-                          </span>
-                          <span className="text-muted-foreground"> {o.perLabel}</span>
-                          {o.savingsCents > 0 && (
-                            <span className="block text-[11px] text-emerald-600 font-semibold">
-                              ahorra {fmtEuros(o.savingsCents)} al año
-                            </span>
-                          )}
-                        </span>
-                      </label>
-                    ))}
-                  </div>
+            {/* ── Email (común a ambas modalidades) ── */}
+            <input
+              type="email"
+              name="email"
+              required
+              defaultValue={knownEmail ?? undefined}
+              placeholder="Tu email de empresa"
+              autoComplete="email"
+              className="w-full max-w-md mx-auto block px-4 py-3 rounded-xl border border-border bg-white text-center text-base text-[#082130] focus:outline-none focus:ring-2 focus:ring-[var(--brand)]"
+            />
 
-                  <input
-                    type="email"
-                    name="email"
-                    required
-                    defaultValue={knownEmail ?? undefined}
-                    placeholder="Tu email de empresa"
-                    autoComplete="email"
-                    className="w-full px-4 py-3 rounded-xl border border-border bg-background text-center text-base focus:outline-none focus:ring-2 focus:ring-[var(--brand)]"
-                  />
-                  <button
-                    type="submit"
-                    className="w-full px-8 py-4 rounded-xl font-semibold text-white text-lg transition-opacity hover:opacity-90 active:opacity-75"
-                    style={{ backgroundColor: "var(--brand)" }}
-                  >
-                    Contratar ahora →
-                  </button>
-                </form>
-              ) : (
-                <p className="text-sm text-muted-foreground italic">
-                  No disponible temporalmente.
-                </p>
-              )}
-            </div>
-
-            {/* ── Modalidad 2: Proveedor de IA propio ── */}
-            <div className="card-paper rounded-2xl p-7 space-y-5 shadow-xl">
-              <div className="space-y-1">
-                <h2 className="text-xl font-bold">Mi propio proveedor de IA</h2>
-                <p className="text-sm text-muted-foreground">
-                  ¿Ya tienes contrato con un proveedor de IA? Usa tu propia
-                  clave y paga solo el software.
-                </p>
-              </div>
-
-              <div className="text-center py-2">
-                <span className="text-4xl font-bold tracking-tight tabular-nums">
-                  {softwarePrice}
+            <div className="grid md:grid-cols-2 gap-6 items-start">
+              {/* ── Modalidad 1: Todo incluido (recomendado) ── */}
+              <div className="card-paper rounded-2xl p-7 space-y-5 shadow-xl border-2 border-[var(--brand)]/40 relative">
+                <span
+                  className="absolute -top-3 left-6 text-[11px] font-bold uppercase tracking-wider px-2.5 py-0.5 rounded-full"
+                  style={{ backgroundColor: "#f2c94c", color: "#082130" }}
+                >
+                  Recomendado
                 </span>
-                <span className="text-muted-foreground"> / año</span>
-                {hasDiscount && (
-                  <p className="text-[11px] text-emerald-600 font-semibold mt-1">
-                    descuento aplicado
+                <div className="space-y-1 pt-1">
+                  <h2 className="text-xl font-bold">Todo incluido</h2>
+                  <p className="text-sm text-muted-foreground">
+                    Software + consumo de IA en una sola cuota. Sin
+                    configuraciones: instalas y funciona.
+                  </p>
+                </div>
+
+                {offered.length > 0 ? (
+                  <div className="space-y-4">
+                    <div className="grid gap-2">
+                      {offered.map((o, i) => (
+                        <label
+                          key={o.period}
+                          className="flex items-center justify-between gap-3 rounded-xl border border-border px-4 py-3 cursor-pointer hover:bg-muted/20 transition-colors has-[:checked]:border-[var(--brand)] has-[:checked]:bg-[var(--brand)]/5"
+                        >
+                          <span className="flex items-center gap-3">
+                            <input
+                              type="radio"
+                              name="tokenPeriod"
+                              value={o.period}
+                              defaultChecked={i === 0}
+                              className="accent-[var(--brand)] h-4 w-4"
+                            />
+                            <span className="text-sm font-medium">{o.label}</span>
+                          </span>
+                          <span className="text-sm tabular-nums text-right">
+                            <span className="font-semibold">
+                              {fmtEuros(o.installment)}
+                            </span>
+                            <span className="text-muted-foreground"> {o.perLabel}</span>
+                            {o.savingsCents > 0 && (
+                              <span className="block text-[11px] text-emerald-600 font-semibold">
+                                ahorra {fmtEuros(o.savingsCents)} al año
+                              </span>
+                            )}
+                          </span>
+                        </label>
+                      ))}
+                    </div>
+                    <button
+                      type="submit"
+                      name="tokenProvision"
+                      value="BUNDLED"
+                      className="w-full px-8 py-4 rounded-xl font-semibold text-white text-lg transition-opacity hover:opacity-90 active:opacity-75"
+                      style={{ backgroundColor: "var(--brand)" }}
+                    >
+                      Contratar ahora →
+                    </button>
+                  </div>
+                ) : (
+                  <p className="text-sm text-muted-foreground italic">
+                    No disponible temporalmente.
                   </p>
                 )}
               </div>
 
-              <form action={checkoutAction} className="space-y-4">
-                <input type="hidden" name="tokenProvision" value="EXTERNAL" />
-                <input
-                  type="email"
-                  name="email"
-                  required
-                  defaultValue={knownEmail ?? undefined}
-                  placeholder="Tu email de empresa"
-                  autoComplete="email"
-                  className="w-full px-4 py-3 rounded-xl border border-border bg-background text-center text-base focus:outline-none focus:ring-2 focus:ring-[var(--brand)]"
-                />
+              {/* ── Modalidad 2: Proveedor de IA propio ── */}
+              <div className="card-paper rounded-2xl p-7 space-y-5 shadow-xl">
+                <div className="space-y-1">
+                  <h2 className="text-xl font-bold">Mi propio proveedor de IA</h2>
+                  <p className="text-sm text-muted-foreground">
+                    ¿Ya tienes contrato con un proveedor de IA? Usa tu propia
+                    clave y paga solo el software.
+                  </p>
+                </div>
+
+                <div className="text-center py-2">
+                  <span className="text-4xl font-bold tracking-tight tabular-nums">
+                    {softwarePrice}
+                  </span>
+                  <span className="text-muted-foreground"> / año</span>
+                  {hasDiscount && (
+                    <p className="text-[11px] text-emerald-600 font-semibold mt-1">
+                      descuento aplicado
+                    </p>
+                  )}
+                </div>
+
                 <button
                   type="submit"
+                  name="tokenProvision"
+                  value="EXTERNAL"
                   className="w-full px-8 py-4 rounded-xl font-semibold text-lg border-2 transition-colors hover:bg-muted/30"
                   style={{ borderColor: "var(--brand)", color: "var(--brand)" }}
                 >
                   Contratar solo software →
                 </button>
-              </form>
-              <p className="text-[11px] text-muted-foreground">
-                La conexión con tu proveedor se configura durante la
-                instalación.
-              </p>
+                <p className="text-[11px] text-muted-foreground">
+                  La conexión con tu proveedor se configura durante la
+                  instalación.
+                </p>
+              </div>
             </div>
-          </div>
+          </form>
         ) : (
           <button
             disabled

@@ -16,6 +16,7 @@ import {
   bundledAnnualTotalCents,
   periodInstallmentCents,
 } from "@/lib/pricing";
+import { sanitizeSelection } from "@/lib/agent-catalog";
 import type { TokenBillingPeriod } from "@/generated/prisma/client";
 
 export type UnifiedCheckoutInput = {
@@ -25,6 +26,9 @@ export type UnifiedCheckoutInput = {
   email: string;
   trackingToken: string | null; // atribución de comercial (null en venta de la casa)
   houseSale: boolean; // venta desde la landing raíz (sin comercial)
+  // Equipo elegido en la landing (ids del catálogo; se sanea aquí).
+  // undefined/[] tras sanear = catálogo completo → no viaja en metadata.
+  selectedAgents?: string[];
 };
 
 // Devuelve la URL de la sesión de Stripe, o null si no se pudo crear
@@ -93,6 +97,8 @@ export async function createUnifiedCheckout(
       tokenBillingPeriod: period ?? "",
       tokenAmountCents: tokenAnnualCents != null ? String(tokenAnnualCents) : "",
       houseSale: input.houseSale ? "1" : "",
+      // ids con coma (~130 chars con los 14; límite Stripe 500). "" = todos.
+      selectedAgents: sanitizeSelection(input.selectedAgents ?? []).join(","),
     },
     customer_email: input.email,
     success_url: `${appUrl}/oferta/${input.slug}/success?session_id={CHECKOUT_SESSION_ID}`,

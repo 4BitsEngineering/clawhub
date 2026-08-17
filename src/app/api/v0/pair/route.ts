@@ -259,7 +259,14 @@ async function provisionDefaultBaseline(
   firmId: string,
   firmName: string,
 ): Promise<{ id: string; version: number } | null> {
-  const files = defaultBaselineFiles(firmName);
+  // Equipo elegido en la compra (agent-selection-before-checkout): la última
+  // compra de la firma manda; [] o sin compra = catálogo completo.
+  const lastPurchase = await db.purchase.findFirst({
+    where: { firmId },
+    orderBy: { createdAt: "desc" },
+    select: { selectedAgents: true },
+  });
+  const files = defaultBaselineFiles(firmName, lastPurchase?.selectedAgents);
   const totalBytes = files.reduce((s, f) => s + f.sizeBytes, 0);
 
   for (let attempt = 0; attempt < 3; attempt++) {

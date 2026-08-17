@@ -5,6 +5,7 @@
 import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 import { db } from "@/lib/db";
+import { resolveTeam } from "@/lib/agent-catalog";
 import { stripe } from "@/lib/stripe";
 import { generatePairingCode } from "@/lib/tokens";
 import { requireFirmAdmin } from "@/lib/session";
@@ -131,7 +132,11 @@ export default async function FirmPortalPage({
         // flujo antiguo en modo pago no tienen Customer en Stripe).
         where: { firmId, status: "COMPLETED", stripeSubscriptionId: { not: null } },
         orderBy: { completedAt: "desc" },
-        select: { stripeSubscriptionId: true, stripeSessionId: true },
+        select: {
+          stripeSubscriptionId: true,
+          stripeSessionId: true,
+          selectedAgents: true,
+        },
       }),
       db.instance.count({ where: { firmId } }),
     ]);
@@ -353,6 +358,35 @@ export default async function FirmPortalPage({
             )}
           </section>
         </div>
+
+        {/* ── Tu equipo contratado ── */}
+        <section
+          className="rounded-2xl p-7 space-y-4 shadow-xl"
+          style={{ backgroundColor: CREAM, color: NAVY_DEEP }}
+        >
+          <p className="text-[11px] font-bold uppercase tracking-[0.14em]" style={{ color: "#8a8574" }}>
+            Tu equipo
+          </p>
+          <h2 className="text-2xl font-bold" style={{ fontFamily: SERIF }}>
+            Especialistas incluidos<span style={{ color: YELLOW }}>.</span>
+          </h2>
+          <div className="flex flex-wrap gap-2">
+            {resolveTeam(purchase?.selectedAgents).map((a) => (
+              <span
+                key={a.agent}
+                className="inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-sm font-medium"
+                style={{ backgroundColor: NAVY, color: CREAM }}
+              >
+                <span>{a.icon}</span> {a.displayName}
+              </span>
+            ))}
+          </div>
+          <p className="text-sm" style={{ color: "#4a4a42" }}>
+            {!purchase || purchase.selectedAgents.length === 0
+              ? "Tu plan incluye el equipo completo de especialistas."
+              : "El equipo que elegiste al contratar. Para ampliarlo, escríbenos a info@iaofi.com."}
+          </p>
+        </section>
 
         {/* Pie */}
         <p className="text-sm text-center pt-4" style={{ color: "rgba(245,239,228,0.55)" }}>

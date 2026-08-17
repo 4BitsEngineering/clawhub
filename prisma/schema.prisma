@@ -1003,6 +1003,10 @@ model Purchase {
   // Venta de la casa (landing raíz, sin comercial): sin comisión y excluida
   // de la atribución manual en /empresa/commissions.
   houseSale           Boolean       @default(false)
+  // Equipo elegido por el comprador antes del pago (ids del catálogo clawcrew,
+  // ver src/lib/agent-catalog.ts). [] = catálogo completo. El pair genera el
+  // baseline por defecto con esta selección (change agent-selection-before-checkout).
+  selectedAgents      String[]      @default([])
   stripeSubscriptionId    String?   // suscripción de tokens
   stripeFeeSubscriptionId String?   // suscripción de renovación anual del fee
   currency            String        @default("EUR")
