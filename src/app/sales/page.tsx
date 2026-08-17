@@ -389,9 +389,9 @@ export default async function SalesPage() {
                         </td>
 
                         {/* Estado + campañas ya enviadas */}
-                        <td className="px-3 py-4 align-top">
+                        <td className="px-3 py-4 align-top leading-none">
                           <span
-                            className={`inline-flex items-center px-2.5 py-1 rounded-full text-[11px] font-semibold ${STATUS_PILL[p.status] ?? ""}`}
+                            className={`inline-flex items-center px-2.5 py-1 rounded-full text-[11px] font-semibold align-top ${STATUS_PILL[p.status] ?? ""}`}
                           >
                             {STATUS_LABELS[p.status]}
                           </span>
