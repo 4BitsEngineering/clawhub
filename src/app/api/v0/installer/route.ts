@@ -59,5 +59,20 @@ export async function GET(req: NextRequest) {
   // de timeout en functions (un .exe de 80MB excede el límite de Vercel
   // serverless edge). Si el downloadUrl es un path de Supabase Storage, lo
   // firmamos a una signed URL caducable; si ya es http(s), pasa-through.
-  return NextResponse.redirect(await resolveDownloadUrl(bundle.downloadUrl), 302);
+  const resolved = await resolveDownloadUrl(bundle.downloadUrl);
+
+  // Si la firma no fue posible (faltan SUPABASE_URL/SUPABASE_SERVICE_ROLE_KEY
+  // en el entorno), resolved es un path relativo y redirect() lanzaría un 500
+  // opaco. Mejor un error claro y accionable.
+  if (!/^https?:\/\//i.test(resolved)) {
+    console.error(
+      "[installer] No se pudo firmar la URL de descarga — ¿faltan SUPABASE_URL / SUPABASE_SERVICE_ROLE_KEY en el entorno?",
+    );
+    return NextResponse.json(
+      { error: "download_unavailable", detail: "storage_signing_failed" },
+      { status: 503 },
+    );
+  }
+
+  return NextResponse.redirect(resolved, 302);
 }
