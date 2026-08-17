@@ -112,7 +112,11 @@ export default async function HomePage() {
     : [];
 
   const emailInputCls =
-    "w-full px-4 py-3 rounded-xl border border-border bg-background text-center text-base focus:outline-none focus:ring-2 focus:ring-[var(--brand)]";
+    "w-full px-4 py-3 rounded-xl border border-border bg-white text-center text-base focus:outline-none focus:ring-2 focus:ring-[var(--brand)]";
+
+  // Ancla de precio para el hero: la cuota mensual (o la primera ofrecida)
+  const fromInstallment =
+    offered.find((o) => o.period === "MONTHLY") ?? offered[0] ?? null;
 
   return (
     <main className="aio-canvas min-h-screen">
@@ -133,9 +137,9 @@ export default async function HomePage() {
         </nav>
       </header>
 
-      <div className="max-w-5xl mx-auto px-6 pb-20 space-y-24">
-        {/* ── Hero ── */}
-        <section className="text-center pt-16 space-y-6">
+      {/* ═══ BANDA NAVY: hero ═══ */}
+      <div className="max-w-5xl mx-auto px-6 pb-20">
+        <section className="text-center pt-14 space-y-6">
           <span
             className="inline-block text-[11px] px-3 py-1 rounded-full font-bold uppercase tracking-[0.14em]"
             style={{ backgroundColor: YELLOW, color: NAVY_DEEP }}
@@ -150,10 +154,16 @@ export default async function HomePage() {
             PC: correo, documentos, marketing, fiscal, laboral… Tú diriges,
             ellos ejecutan.
           </p>
-          <div className="flex items-center justify-center gap-4 pt-2">
+          {fromInstallment && (
+            <p className="text-sm font-semibold" style={{ color: YELLOW }}>
+              Desde {fmtEuros(fromInstallment.installment)}
+              {fromInstallment.perLabel}, todo incluido
+            </p>
+          )}
+          <div className="flex items-center justify-center gap-4 pt-1">
             <a
               href="#precios"
-              className="px-8 py-4 rounded-xl font-semibold text-lg"
+              className="px-8 py-4 rounded-xl font-semibold text-lg shadow-lg"
               style={{ backgroundColor: YELLOW, color: NAVY_DEEP }}
             >
               Empezar ahora →
@@ -166,11 +176,22 @@ export default async function HomePage() {
               Cómo funciona
             </a>
           </div>
+
+          {/* Franja de confianza */}
+          <div
+            className="flex flex-wrap items-center justify-center gap-x-6 gap-y-2 pt-6 text-xs"
+            style={{ color: "rgba(245,239,228,0.6)" }}
+          >
+            <span>✓ Pago seguro con Stripe</span>
+            <span>✓ Sin permanencia</span>
+            <span>✓ Tus datos, en tu PC</span>
+            <span>✓ Acompañamiento en la puesta en marcha</span>
+          </div>
         </section>
 
-        {/* ── Vídeo (si está configurado en el panel) ── */}
+        {/* Vídeo (si está configurado en el panel) */}
         {landing?.videoUrl && (
-          <section className="rounded-2xl overflow-hidden aspect-video shadow-2xl">
+          <section className="rounded-2xl overflow-hidden aspect-video shadow-2xl mt-14">
             <iframe
               src={landing.videoUrl}
               title="AI-Office demo"
@@ -180,58 +201,75 @@ export default async function HomePage() {
             />
           </section>
         )}
+      </div>
 
-        {/* ── El equipo ── */}
-        <section className="space-y-8">
-          <div className="text-center space-y-2">
-            <h2 className="text-3xl sm:text-4xl font-bold" style={{ fontFamily: "Georgia, serif" }}>
-              Tu nuevo equipo<span style={{ color: YELLOW }}>.</span>
-            </h2>
-            <p style={{ color: "rgba(245,239,228,0.75)" }}>
-              Once especialistas listos desde el primer día. Les pides las cosas
-              como se las pedirías a una persona.
-            </p>
-          </div>
-          <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
-            {TEAM.map(([icon, name, desc]) => (
-              <div key={name} className="card-paper rounded-2xl p-5 flex items-start gap-4">
-                <span className="text-2xl">{icon}</span>
-                <div>
-                  <p className="font-semibold text-sm">{name}</p>
-                  <p className="text-xs text-muted-foreground mt-0.5">{desc}</p>
+      {/* ═══ BANDA CLARA: equipo + cómo funciona ═══ */}
+      <div className="aio-band-light">
+        <div className="max-w-5xl mx-auto px-6 py-20 space-y-20">
+          {/* El equipo */}
+          <section className="space-y-8">
+            <div className="text-center space-y-2">
+              <h2 className="text-3xl sm:text-4xl font-bold" style={{ fontFamily: "Georgia, serif" }}>
+                Tu nuevo equipo<span style={{ color: "#d4a514" }}>.</span>
+              </h2>
+              <p className="text-muted-foreground">
+                Once especialistas listos desde el primer día. Les pides las
+                cosas como se las pedirías a una persona.
+              </p>
+            </div>
+            <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
+              {TEAM.map(([icon, name, desc]) => (
+                <div key={name} className="card-paper rounded-2xl p-5 flex items-start gap-4">
+                  <span className="text-2xl">{icon}</span>
+                  <div>
+                    <p className="font-semibold text-sm">{name}</p>
+                    <p className="text-xs text-muted-foreground mt-0.5">{desc}</p>
+                  </div>
                 </div>
-              </div>
-            ))}
-          </div>
-        </section>
+              ))}
+            </div>
+          </section>
 
-        {/* ── Cómo funciona ── */}
-        <section id="como-funciona" className="space-y-8 scroll-mt-8">
-          <div className="text-center space-y-2">
-            <h2 className="text-3xl sm:text-4xl font-bold" style={{ fontFamily: "Georgia, serif" }}>
-              En marcha en una tarde<span style={{ color: YELLOW }}>.</span>
-            </h2>
-          </div>
-          <div className="grid md:grid-cols-3 gap-5">
-            {[
-              ["1", "Contrata tu plan", "Elige Todo incluido o trae tu propio proveedor de IA. Pago seguro con Stripe."],
-              ["2", "Instala con tu código", "Recibes por email tu código de activación y el instalador. Un solo ejecutable, sin configuraciones."],
-              ["3", "Tu equipo, a trabajar", "AI-Office arranca configurado y te acompañamos en la puesta en marcha. Sin permanencia."],
-            ].map(([n, title, desc]) => (
-              <div key={n} className="card-paper rounded-2xl p-6 space-y-3">
-                <span
-                  className="inline-flex h-9 w-9 items-center justify-center rounded-full font-bold"
-                  style={{ backgroundColor: YELLOW, color: NAVY_DEEP }}
-                >
-                  {n}
-                </span>
-                <p className="font-semibold">{title}</p>
-                <p className="text-sm text-muted-foreground">{desc}</p>
-              </div>
-            ))}
-          </div>
-        </section>
+          {/* Cómo funciona */}
+          <section id="como-funciona" className="space-y-8 scroll-mt-8">
+            <div className="text-center space-y-2">
+              <h2 className="text-3xl sm:text-4xl font-bold" style={{ fontFamily: "Georgia, serif" }}>
+                En marcha en una tarde<span style={{ color: "#d4a514" }}>.</span>
+              </h2>
+            </div>
+            <div className="grid md:grid-cols-3 gap-5">
+              {[
+                ["1", "Contrata tu plan", "Elige Todo incluido o trae tu propio proveedor de IA. Pago seguro con Stripe."],
+                ["2", "Instala con tu código", "Recibes por email tu código de activación y el instalador. Un solo ejecutable, sin configuraciones."],
+                ["3", "Tu equipo, a trabajar", "AI-Office arranca configurado y te acompañamos en la puesta en marcha. Sin permanencia."],
+              ].map(([n, title, desc]) => (
+                <div key={n} className="card-paper rounded-2xl p-6 space-y-3">
+                  <span
+                    className="inline-flex h-9 w-9 items-center justify-center rounded-full font-bold"
+                    style={{ backgroundColor: YELLOW, color: NAVY_DEEP }}
+                  >
+                    {n}
+                  </span>
+                  <p className="font-semibold">{title}</p>
+                  <p className="text-sm text-muted-foreground">{desc}</p>
+                </div>
+              ))}
+            </div>
+            <div className="text-center pt-2">
+              <a
+                href="#precios"
+                className="inline-block px-8 py-4 rounded-xl font-semibold text-lg shadow-md"
+                style={{ backgroundColor: NAVY_DEEP, color: "#f5efe4" }}
+              >
+                Ver planes y precios →
+              </a>
+            </div>
+          </section>
+        </div>
+      </div>
 
+      {/* ═══ BANDA NAVY: precios ═══ */}
+      <div className="max-w-5xl mx-auto px-6 py-20 space-y-24">
         {/* ── Precios ── */}
         <section id="precios" className="space-y-8 scroll-mt-8">
           <div className="text-center space-y-2">
@@ -359,10 +397,13 @@ export default async function HomePage() {
           </p>
         </section>
 
-        {/* ── FAQ ── */}
-        <section className="space-y-6 max-w-3xl mx-auto">
+      </div>
+
+      {/* ═══ BANDA CLARA: FAQ ═══ */}
+      <div className="aio-band-light">
+        <div className="max-w-3xl mx-auto px-6 py-20 space-y-6">
           <h2 className="text-3xl font-bold text-center" style={{ fontFamily: "Georgia, serif" }}>
-            Preguntas frecuentes<span style={{ color: YELLOW }}>.</span>
+            Preguntas frecuentes<span style={{ color: "#d4a514" }}>.</span>
           </h2>
           <div className="space-y-3">
             {FAQ.map(([q, a]) => (
@@ -375,12 +416,14 @@ export default async function HomePage() {
               </details>
             ))}
           </div>
-        </section>
+        </div>
+      </div>
 
-        {/* ── Footer ── */}
+      {/* ═══ Footer (navy) ═══ */}
+      <div className="max-w-5xl mx-auto px-6 py-10">
         <footer
-          className="border-t pt-8 text-sm flex flex-col sm:flex-row items-center justify-between gap-4"
-          style={{ borderColor: "rgba(245,239,228,0.15)", color: "rgba(245,239,228,0.6)" }}
+          className="text-sm flex flex-col sm:flex-row items-center justify-between gap-4"
+          style={{ color: "rgba(245,239,228,0.6)" }}
         >
           <span>
             <strong style={{ color: "rgba(245,239,228,0.85)" }}>AI Office</strong> · iaofi.com

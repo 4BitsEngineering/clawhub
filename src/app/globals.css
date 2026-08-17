@@ -167,6 +167,38 @@
   content: none;
 }
 
+/* Banda CLARA dentro del lienzo (ritmo visual en landings largas): fondo
+   crema con texto navy; las tarjetas dentro pasan a blanco con borde suave. */
+.aio-canvas .aio-band-light {
+  --background: #f5efe4;
+  --foreground: #082130;
+  --card: #ffffff;
+  --card-foreground: #082130;
+  --popover: #ffffff;
+  --popover-foreground: #082130;
+  --primary: #0c2b3d;
+  --primary-foreground: #f5efe4;
+  --secondary: rgba(8, 33, 48, 0.07);
+  --secondary-foreground: #082130;
+  --muted: rgba(8, 33, 48, 0.05);
+  --muted-foreground: #6f6a5c;
+  --accent: rgba(242, 201, 76, 0.25);
+  --accent-foreground: #082130;
+  --border: rgba(8, 33, 48, 0.12);
+  --input: rgba(8, 33, 48, 0.2);
+  --ring: #0c2b3d;
+  --brand: #0c2b3d;
+  --brand-foreground: #f5efe4;
+
+  background: #f5efe4;
+  color: var(--foreground);
+}
+.aio-canvas .aio-band-light .card-paper {
+  background-color: #ffffff;
+  border: 1px solid rgba(8, 33, 48, 0.08);
+  box-shadow: 0 2px 10px rgba(8, 33, 48, 0.06);
+}
+
 /* Dentro de las tarjetas: crema con texto oscuro (como el portal del cliente) */
 .aio-canvas .card-paper,
 .aio-canvas .card-quiet {
