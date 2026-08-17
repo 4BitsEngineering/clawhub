@@ -222,7 +222,10 @@ export async function POST(req: NextRequest) {
   // del PC) no se pierde; se puede promover un baseline y reintentar la descarga.
   if (!promoted) {
     try {
-      promoted = await provisionDefaultBaseline(pairingToken.firmId);
+      promoted = await provisionDefaultBaseline(
+        pairingToken.firmId,
+        pairingToken.firm.name,
+      );
       await recordActivity({
         kind: "baseline.default_provisioned",
         summary: `Baseline por defecto generado para "${pairingToken.firm.name}" al parear sin configurator`,
@@ -254,8 +257,9 @@ export async function POST(req: NextRequest) {
 // parean la misma firma a la vez.
 async function provisionDefaultBaseline(
   firmId: string,
+  firmName: string,
 ): Promise<{ id: string; version: number } | null> {
-  const files = defaultBaselineFiles();
+  const files = defaultBaselineFiles(firmName);
   const totalBytes = files.reduce((s, f) => s + f.sizeBytes, 0);
 
   for (let attempt = 0; attempt < 3; attempt++) {
