@@ -16,7 +16,7 @@ export function EmpresaNav({ isOperator }: { isOperator: boolean }) {
     ...(isOperator
       ? [
           { href: "/empresa/campaigns", label: "Campañas", exact: false },
-          { href: "/empresa/landing", label: "Landing", exact: false },
+          { href: "/empresa/landing", label: "Landing y precios", exact: false },
         ]
       : []),
     { href: "/empresa/commissions", label: "Comisiones", exact: false },
