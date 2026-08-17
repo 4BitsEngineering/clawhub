@@ -67,3 +67,53 @@ export function fmtEuros(cents: number): string {
     currency: "EUR",
   });
 }
+
+// ── Modelo unificado (unified-pricing-token-options) ─────────────────────────
+// Un solo precio visible: software prorrateado + tokens, cobrado como cuota
+// recurrente del periodo elegido. El desglose solo vive en metadata/BD.
+
+// Pagos por año de cada periodo (la cuota = total anual / pagos)
+export const PERIOD_PAYMENTS_PER_YEAR: Record<TokenBillingPeriod, number> = {
+  MONTHLY: 12,
+  QUARTERLY: 4,
+  SEMIANNUAL: 2,
+  ANNUAL: 1,
+};
+
+type UnifiedPricingInput = {
+  originalPriceCents: number;
+  discountPriceCents: number;
+  feeDiscountType: DiscountType;
+  feeDiscountPercent: number | null;
+  tokenMonthlyPriceCents: number;
+  tokenMonthlyPriceAnnualCents: number;
+};
+
+// Componente anual de tokens según periodo: pronto pago si es ANUAL.
+export function tokenAnnualComponentCents(
+  lp: UnifiedPricingInput,
+  period: TokenBillingPeriod,
+): number {
+  const monthly =
+    period === "ANNUAL"
+      ? Math.min(lp.tokenMonthlyPriceAnnualCents, lp.tokenMonthlyPriceCents)
+      : lp.tokenMonthlyPriceCents;
+  return monthly * 12;
+}
+
+// Total anual del pack (software efectivo + tokens del periodo).
+export function bundledAnnualTotalCents(
+  lp: UnifiedPricingInput,
+  period: TokenBillingPeriod,
+): number {
+  return effectiveFirstYearFeeCents(lp) + tokenAnnualComponentCents(lp, period);
+}
+
+// Cuota por periodo: round(total anual / pagos). El desvío por redondeo es de
+// céntimos al año y se asume (ej. 440/12 = 36,67 → 440,04 €/año).
+export function periodInstallmentCents(
+  totalAnnualCents: number,
+  period: TokenBillingPeriod,
+): number {
+  return Math.round(totalAnnualCents / PERIOD_PAYMENTS_PER_YEAR[period]);
+}

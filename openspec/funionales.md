@@ -157,22 +157,23 @@ Acceso: rol `FIRM_ADMIN` (el comprador de AI-Office; se crea automáticamente al
   - El token se registra al visitar (`LandingVisit`) y al comprar (`Purchase`)
   - Permite atribuir la venta al comercial correcto automáticamente
 
-### Modelo de precios — change `checkout-fee-and-token-subscription`
+### Modelo de precios — change `unified-pricing-token-options` (sustituye al desglosado)
 
-La venta tiene **dos conceptos**, ambos como suscripción de Stripe:
+**Precio unificado de cara al cliente** — no se separa software y tokens en la UI pública. Dos modalidades:
 
-1. **Fee de licencia** — suscripción **anual**. Primer año a precio con descuento (149€), renovaciones a precio de lista (200€).
-2. **Tokens** — suscripción de consumo a 20€/mes, con periodo elegible por el cliente: **mensual (20€), trimestral (60€), semestral (120€) o anual (240€)** — múltiplo exacto. El cliente elige el periodo en la landing antes de pagar.
+1. **Todo incluido (BUNDLED, recomendado)**: una sola cuota recurrente que incluye software + consumo de IA. Total anual = software efectivo (200 €) + tokens×12 (20 €/mes estándar; **15 €/mes con pago anual — pronto pago**). Cuota = total/pagos del periodo. Con defaults: **36,67 €/mes · 110 €/trimestre · 220 €/semestre · 380 €/año (ahorra 60 €)**.
+2. **Proveedor de IA propio (EXTERNAL)**: el cliente usa su propio LLM → paga **solo el software, 200 €/año**. La config del proveedor externo en el instalador es spec futura (API pendiente de documentación).
 
-**Un solo pago del cliente:** el checkout (modo suscripción) cobra en una única factura el fee del primer año + el primer periodo de tokens. El fee del año 1 va como line item one-time; la renovación anual del fee la crea el webhook como segunda suscripción anclada a +1 año (sin cobro inmediato). Dos suscripciones en Stripe, pero **una sola tarjeta y una sola autorización**.
+**Stripe**: UNA sola suscripción por compra (la cuota del periodo, o la anual del software en EXTERNAL). Ya no existe la segunda suscripción del fee. `allow_promotion_codes: true` → **cupones** creados en el dashboard de Stripe, el cliente los introduce en el pago.
 
-**Comisión del comercial:** se calcula **solo sobre el fee** (`Purchase.feeAmountCents`), nunca sobre los tokens ni sobre las renovaciones. La atribución manual usa la misma base.
+**Comisión del comercial**: intacta — solo sobre el componente software (`Purchase.feeAmountCents`), una vez, en la compra inicial. Los cupones de Stripe NO bajan la base de comisión (los descuentos "oficiales" se configuran en el panel y esos sí la bajan). Sin descuento inicial por defecto (D7): software a 200 € de lista.
 
 **Configurable por el administrador (OPERATOR)** en `/empresa/landing`:
-- Precio de renovación anual del fee
-- Descuento del primer año, en **importe (€) o en porcentaje (%)**
-- Precio de tokens (€/mes)
-- Qué periodos de tokens se ofrecen (checkboxes; al menos uno)
+- Precio del software anual + descuento (€ o %)
+- Tokens €/mes estándar y **€/mes con pago anual** (pronto pago, validado ≤ estándar)
+- Qué periodos se ofrecen (checkboxes)
+
+**Registro interno**: `Purchase.tokenProvision` (BUNDLED/EXTERNAL) + desglose en `feeAmountCents`/`tokenAmountCents` (solo metadata/BD, invisible al cliente).
 
 ---
 

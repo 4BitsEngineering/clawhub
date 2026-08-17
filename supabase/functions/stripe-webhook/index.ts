@@ -98,6 +98,10 @@ async function handleCheckoutCompleted(session: Stripe.Checkout.Session) {
   const tokenAmountCents = meta.tokenAmountCents
     ? parseInt(meta.tokenAmountCents as string, 10)
     : null;
+  // Modelo unificado (unified-pricing-token-options): BUNDLED | EXTERNAL.
+  // Su presencia marca que la compra es del modelo de UNA sola suscripción
+  // (la cuota ya prorratea el software) — no se crea la 2ª sub del fee.
+  const tokenProvision = (meta.tokenProvision as string | undefined) || null;
 
   // Suscripción de tokens creada por el checkout, y el customer para anclar la
   // segunda suscripción (renovación anual del fee).
@@ -202,15 +206,17 @@ async function handleCheckoutCompleted(session: Stripe.Checkout.Session) {
     }
   }
 
-  // ── Renovación anual del fee (2ª suscripción, anclada al año siguiente) ────
-  // El año 1 ya se cobró en el checkout como line item one-time. Esta
-  // suscripción no cobra nada ahora (trial_end = +1 año) y renueva a precio de
-  // lista. No bloquea el flujo: si falla, se registra y se sigue.
-  const feeSubscriptionId = await createFeeRenewalSubscription({
-    customerId,
-    renewalCents: feeRenewalCents,
-    currency: (session.currency ?? "eur").toLowerCase(),
-  });
+  // ── Renovación anual del fee (SOLO modelo antiguo) ───────────────────────
+  // En el modelo unificado (tokenProvision presente) hay UNA sola suscripción
+  // cuya cuota ya incluye el software prorrateado — no se crea nada más.
+  // El código se conserva para reintentos de eventos del flujo antiguo.
+  const feeSubscriptionId = tokenProvision
+    ? null
+    : await createFeeRenewalSubscription({
+        customerId,
+        renewalCents: feeRenewalCents,
+        currency: (session.currency ?? "eur").toLowerCase(),
+      });
 
   // ── Registrar Purchase ───────────────────────────────────────────────────
   const { data: purchase, error: purchaseErr } = await db
@@ -227,6 +233,7 @@ async function handleCheckoutCompleted(session: Stripe.Checkout.Session) {
       feeAmountCents,
       tokenBillingPeriod,
       tokenAmountCents,
+      tokenProvision,
       stripeSubscriptionId: tokenSubscriptionId,
       stripeFeeSubscriptionId: feeSubscriptionId,
       currency,

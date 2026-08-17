@@ -7,9 +7,12 @@ import { stripe, ANNUAL_LICENSE_NAME, ANNUAL_LICENSE_DESC } from "@/lib/stripe";
 import {
   TOKEN_PERIODS_ORDER,
   TOKEN_PERIOD_LABEL,
-  tokenPeriodAmountCents,
   tokenStripeInterval,
   effectiveFirstYearFeeCents,
+  tokenAnnualComponentCents,
+  bundledAnnualTotalCents,
+  periodInstallmentCents,
+  PERIOD_PAYMENTS_PER_YEAR,
   fmtEuros,
 } from "@/lib/pricing";
 import type { TokenBillingPeriod } from "@/generated/prisma/client";
@@ -60,15 +63,36 @@ export default async function LandingPublicPage({
     const lp = await db.landingPage.findUnique({ where: { slug } });
     if (!lp) return;
 
-    // Periodo de tokens elegido — debe estar entre los ofrecidos por el admin.
-    const period = formData.get("tokenPeriod") as TokenBillingPeriod | null;
-    if (!period || !lp.tokenPeriods.includes(period)) return;
+    // Modalidad: BUNDLED (precio unificado software+tokens) o EXTERNAL
+    // (el cliente trae su proveedor LLM → solo software, anual).
+    const provision =
+      formData.get("tokenProvision") === "EXTERNAL" ? "EXTERNAL" : "BUNDLED";
 
     const currency = lp.currency.toLowerCase();
-    const feeCents = effectiveFirstYearFeeCents(lp);
-    const renewalCents = lp.originalPriceCents;
-    const tokenCents = tokenPeriodAmountCents(lp.tokenMonthlyPriceCents, period);
-    const tokenInterval = tokenStripeInterval(period);
+    const softwareCents = effectiveFirstYearFeeCents(lp); // base de comisión
+
+    let unitAmount: number;
+    let interval: { interval: "month" | "year"; interval_count: number };
+    let productName: string;
+    let period: TokenBillingPeriod | null = null;
+    let tokenAnnualCents: number | null = null;
+
+    if (provision === "BUNDLED") {
+      // Periodo elegido — debe estar entre los ofrecidos por el admin.
+      const p = formData.get("tokenPeriod") as TokenBillingPeriod | null;
+      if (!p || !lp.tokenPeriods.includes(p)) return;
+      period = p;
+      tokenAnnualCents = tokenAnnualComponentCents(lp, p);
+      // Cuota unificada del periodo: (software efectivo + tokens año) / pagos
+      unitAmount = periodInstallmentCents(bundledAnnualTotalCents(lp, p), p);
+      interval = tokenStripeInterval(p);
+      productName = `AI-Office · Todo incluido (${TOKEN_PERIOD_LABEL[p]})`;
+    } else {
+      // Solo software, facturación anual.
+      unitAmount = softwareCents;
+      interval = { interval: "year", interval_count: 1 };
+      productName = `${ANNUAL_LICENSE_NAME} · Proveedor de IA propio`;
+    }
 
     const session = await stripe.checkout.sessions.create({
       mode: "subscription",
@@ -76,48 +100,32 @@ export default async function LandingPublicPage({
       // sin que Stripe añada IVA por encima (el IVA lo facturamos nosotros).
       payment_method_types: ["card"],
       managed_payments: { enabled: false },
+      // Cupones: el cliente puede introducir un código promocional de Stripe.
+      // El descuento lo aplica Stripe sobre la cuota; NO altera feeAmountCents
+      // (la base de comisión) — los descuentos que deben bajar la comisión se
+      // configuran en el panel (descuento del software).
+      allow_promotion_codes: true,
       line_items: [
-        // Suscripción de tokens (recurrente en el periodo elegido).
         {
           price_data: {
             currency,
-            product_data: { name: `AI-Office · Tokens (${TOKEN_PERIOD_LABEL[period]})` },
-            unit_amount: tokenCents,
+            product_data: { name: productName, description: ANNUAL_LICENSE_DESC },
+            unit_amount: unitAmount,
             recurring: {
-              interval: tokenInterval.interval,
-              interval_count: tokenInterval.interval_count,
+              interval: interval.interval,
+              interval_count: interval.interval_count,
             },
-          },
-          quantity: 1,
-        },
-        // Fee del primer año: precio one-time → cae solo en la primera factura.
-        // La renovación anual del fee la crea el webhook como 2ª suscripción.
-        {
-          price_data: {
-            currency,
-            product_data: {
-              name: ANNUAL_LICENSE_NAME,
-              description: ANNUAL_LICENSE_DESC,
-            },
-            unit_amount: feeCents,
           },
           quantity: 1,
         },
       ],
-      subscription_data: {
-        metadata: {
-          trackingToken: attribution ?? "",
-          landingSlug: slug,
-          kind: "tokens",
-        },
-      },
       metadata: {
         trackingToken: attribution ?? "",
         landingSlug: slug,
-        feeAmountCents: String(feeCents),
-        feeRenewalCents: String(renewalCents),
-        tokenBillingPeriod: period,
-        tokenAmountCents: String(tokenCents),
+        tokenProvision: provision,
+        feeAmountCents: String(softwareCents),
+        tokenBillingPeriod: period ?? "",
+        tokenAmountCents: tokenAnnualCents != null ? String(tokenAnnualCents) : "",
       },
       customer_email: customerEmail,
       success_url: `${appUrl}/oferta/${slug}/success?session_id={CHECKOUT_SESSION_ID}`,
@@ -137,20 +145,33 @@ export default async function LandingPublicPage({
     });
   });
 
-  // Precios derivados para la UI
-  const feeFirstYearCents = effectiveFirstYearFeeCents(landing);
-  const originalPrice = fmtEuros(landing.originalPriceCents);
-  const discountPrice = fmtEuros(feeFirstYearCents);
-  const hasDiscount = feeFirstYearCents < landing.originalPriceCents;
+  // Precios derivados para la UI (modelo unificado: la cuota ya incluye
+  // software + tokens; el desglose no se muestra al público)
+  const softwareCents = effectiveFirstYearFeeCents(landing);
+  const softwarePrice = fmtEuros(softwareCents);
+  const hasDiscount = softwareCents < landing.originalPriceCents;
 
-  // Periodos de tokens ofrecidos (en orden canónico) con su importe
+  // Cuotas por periodo ofrecido; el ahorro del anual se calcula contra el
+  // total anual pagando mensual (tokens a precio estándar)
+  const annualAtStandard = bundledAnnualTotalCents(
+    { ...landing, tokenMonthlyPriceAnnualCents: landing.tokenMonthlyPriceCents },
+    "ANNUAL",
+  );
   const offered = TOKEN_PERIODS_ORDER.filter((p) =>
     landing.tokenPeriods.includes(p),
-  ).map((p) => ({
-    period: p,
-    label: TOKEN_PERIOD_LABEL[p],
-    cents: tokenPeriodAmountCents(landing.tokenMonthlyPriceCents, p),
-  }));
+  ).map((p) => {
+    const total = bundledAnnualTotalCents(landing, p);
+    const installment = periodInstallmentCents(total, p);
+    const savingsCents = p === "ANNUAL" ? annualAtStandard - total : 0;
+    return {
+      period: p,
+      label: TOKEN_PERIOD_LABEL[p],
+      installment,
+      perLabel:
+        p === "MONTHLY" ? "/ mes" : p === "QUARTERLY" ? "/ trimestre" : p === "SEMIANNUAL" ? "/ semestre" : "/ año",
+      savingsCents,
+    };
+  });
 
   return (
     <main className="min-h-screen bg-background">
@@ -194,116 +215,149 @@ export default async function LandingPublicPage({
           />
         )}
 
-        {/* ── CTA y precio ── */}
-        <div className="card-paper rounded-2xl p-8 sm:p-10 space-y-6 shadow-xl">
-          {/* Fee de licencia */}
-          <div className="text-center space-y-1">
-            {hasDiscount && (
-              <p className="text-xs uppercase tracking-widest text-muted-foreground font-semibold">
-                Oferta primer año
-              </p>
-            )}
-            <div className="flex items-center justify-center gap-4 pt-1">
-              {hasDiscount && (
-                <span className="text-2xl text-muted-foreground line-through">
-                  {originalPrice}
-                </span>
-              )}
-              <span className="text-5xl sm:text-6xl font-bold tracking-tight">
-                {discountPrice}
-              </span>
-            </div>
-            <p className="text-sm text-muted-foreground pt-1">
-              Licencia AI-Office · primer año
-              {hasDiscount && (
-                <>
-                  {" "}
-                  <span className="text-muted-foreground/80">
-                    (renovación {originalPrice}/año)
-                  </span>
-                </>
-              )}
-            </p>
-          </div>
+        {/* ── CTA: precio unificado, dos modalidades ── */}
+        {landing.discountEndsAt && (
+          <CountdownTimer endsAt={landing.discountEndsAt.getTime()} />
+        )}
 
-          {landing.discountEndsAt && (
-            <CountdownTimer endsAt={landing.discountEndsAt.getTime()} />
-          )}
-
-          {stripeEnabled && offered.length > 0 ? (
-            <form action={checkoutAction} className="max-w-md mx-auto space-y-4">
-              {/* Selector de periodo de tokens */}
-              <div className="space-y-2 text-left">
-                <p className="text-sm font-medium">Plan de tokens</p>
-                <p className="text-xs text-muted-foreground -mt-1">
-                  Consumo de IA. Elige cada cuánto se factura.
-                </p>
-                <div className="grid gap-2 pt-1">
-                  {offered.map((o, i) => (
-                    <label
-                      key={o.period}
-                      className="flex items-center justify-between gap-3 rounded-xl border border-border px-4 py-3 cursor-pointer hover:bg-muted/20 transition-colors has-[:checked]:border-[var(--brand)] has-[:checked]:bg-[var(--brand)]/5"
-                    >
-                      <span className="flex items-center gap-3">
-                        <input
-                          type="radio"
-                          name="tokenPeriod"
-                          value={o.period}
-                          required
-                          defaultChecked={i === 0}
-                          className="accent-[var(--brand)] h-4 w-4"
-                        />
-                        <span className="text-sm font-medium">{o.label}</span>
-                      </span>
-                      <span className="text-sm tabular-nums">
-                        {fmtEuros(o.cents)}
-                        <span className="text-muted-foreground">
-                          {" "}
-                          / {o.label.toLowerCase()}
-                        </span>
-                      </span>
-                    </label>
-                  ))}
-                </div>
-              </div>
-
-              <input
-                type="email"
-                name="email"
-                required
-                defaultValue={knownEmail ?? undefined}
-                placeholder="Tu email de empresa"
-                autoComplete="email"
-                className="w-full px-4 py-3 rounded-xl border border-border bg-background text-center text-base focus:outline-none focus:ring-2 focus:ring-[var(--brand)]"
-              />
-
-              <button
-                type="submit"
-                className="w-full px-12 py-4 rounded-xl font-semibold text-white text-lg transition-opacity hover:opacity-90 active:opacity-75"
+        {stripeEnabled ? (
+          <div className="grid md:grid-cols-2 gap-6 items-start">
+            {/* ── Modalidad 1: Todo incluido (recomendado) ── */}
+            <div className="card-paper rounded-2xl p-7 space-y-5 shadow-xl border-2 border-[var(--brand)]/40 relative">
+              <span
+                className="absolute -top-3 left-6 text-[11px] font-bold uppercase tracking-wider px-2.5 py-0.5 rounded-full text-white"
                 style={{ backgroundColor: "var(--brand)" }}
               >
-                Contratar ahora →
-              </button>
-              <p className="text-xs text-muted-foreground text-center">
-                Hoy pagas el primer año de licencia ({discountPrice}) + el
-                primer periodo de tokens del plan elegido. Te enviaremos la
-                licencia y el instalador a tu email.
-              </p>
-            </form>
-          ) : (
-            <button
-              disabled
-              className="w-full sm:w-auto px-12 py-4 rounded-xl font-semibold text-white text-lg opacity-50 cursor-not-allowed select-none block mx-auto"
-              style={{ backgroundColor: "var(--brand)" }}
-            >
-              Contratar ahora — próximamente
-            </button>
-          )}
+                Recomendado
+              </span>
+              <div className="space-y-1 pt-1">
+                <h2 className="text-xl font-bold">Todo incluido</h2>
+                <p className="text-sm text-muted-foreground">
+                  Software + consumo de IA en una sola cuota. Sin
+                  configuraciones: instalas y funciona.
+                </p>
+              </div>
 
-          <p className="text-xs text-muted-foreground text-center">
-            Pago seguro con Stripe · Activación inmediata · Sin permanencia
-          </p>
-        </div>
+              {offered.length > 0 ? (
+                <form action={checkoutAction} className="space-y-4">
+                  <input type="hidden" name="tokenProvision" value="BUNDLED" />
+                  <div className="grid gap-2">
+                    {offered.map((o, i) => (
+                      <label
+                        key={o.period}
+                        className="flex items-center justify-between gap-3 rounded-xl border border-border px-4 py-3 cursor-pointer hover:bg-muted/20 transition-colors has-[:checked]:border-[var(--brand)] has-[:checked]:bg-[var(--brand)]/5"
+                      >
+                        <span className="flex items-center gap-3">
+                          <input
+                            type="radio"
+                            name="tokenPeriod"
+                            value={o.period}
+                            required
+                            defaultChecked={i === 0}
+                            className="accent-[var(--brand)] h-4 w-4"
+                          />
+                          <span className="text-sm font-medium">{o.label}</span>
+                        </span>
+                        <span className="text-sm tabular-nums text-right">
+                          <span className="font-semibold">
+                            {fmtEuros(o.installment)}
+                          </span>
+                          <span className="text-muted-foreground"> {o.perLabel}</span>
+                          {o.savingsCents > 0 && (
+                            <span className="block text-[11px] text-emerald-600 font-semibold">
+                              ahorra {fmtEuros(o.savingsCents)} al año
+                            </span>
+                          )}
+                        </span>
+                      </label>
+                    ))}
+                  </div>
+
+                  <input
+                    type="email"
+                    name="email"
+                    required
+                    defaultValue={knownEmail ?? undefined}
+                    placeholder="Tu email de empresa"
+                    autoComplete="email"
+                    className="w-full px-4 py-3 rounded-xl border border-border bg-background text-center text-base focus:outline-none focus:ring-2 focus:ring-[var(--brand)]"
+                  />
+                  <button
+                    type="submit"
+                    className="w-full px-8 py-4 rounded-xl font-semibold text-white text-lg transition-opacity hover:opacity-90 active:opacity-75"
+                    style={{ backgroundColor: "var(--brand)" }}
+                  >
+                    Contratar ahora →
+                  </button>
+                </form>
+              ) : (
+                <p className="text-sm text-muted-foreground italic">
+                  No disponible temporalmente.
+                </p>
+              )}
+            </div>
+
+            {/* ── Modalidad 2: Proveedor de IA propio ── */}
+            <div className="card-paper rounded-2xl p-7 space-y-5 shadow-xl">
+              <div className="space-y-1">
+                <h2 className="text-xl font-bold">Mi propio proveedor de IA</h2>
+                <p className="text-sm text-muted-foreground">
+                  ¿Ya tienes contrato con un proveedor de IA? Usa tu propia
+                  clave y paga solo el software.
+                </p>
+              </div>
+
+              <div className="text-center py-2">
+                <span className="text-4xl font-bold tracking-tight tabular-nums">
+                  {softwarePrice}
+                </span>
+                <span className="text-muted-foreground"> / año</span>
+                {hasDiscount && (
+                  <p className="text-[11px] text-emerald-600 font-semibold mt-1">
+                    descuento aplicado
+                  </p>
+                )}
+              </div>
+
+              <form action={checkoutAction} className="space-y-4">
+                <input type="hidden" name="tokenProvision" value="EXTERNAL" />
+                <input
+                  type="email"
+                  name="email"
+                  required
+                  defaultValue={knownEmail ?? undefined}
+                  placeholder="Tu email de empresa"
+                  autoComplete="email"
+                  className="w-full px-4 py-3 rounded-xl border border-border bg-background text-center text-base focus:outline-none focus:ring-2 focus:ring-[var(--brand)]"
+                />
+                <button
+                  type="submit"
+                  className="w-full px-8 py-4 rounded-xl font-semibold text-lg border-2 transition-colors hover:bg-muted/30"
+                  style={{ borderColor: "var(--brand)", color: "var(--brand)" }}
+                >
+                  Contratar solo software →
+                </button>
+              </form>
+              <p className="text-[11px] text-muted-foreground">
+                La conexión con tu proveedor se configura durante la
+                instalación.
+              </p>
+            </div>
+          </div>
+        ) : (
+          <button
+            disabled
+            className="w-full sm:w-auto px-12 py-4 rounded-xl font-semibold text-white text-lg opacity-50 cursor-not-allowed select-none block mx-auto"
+            style={{ backgroundColor: "var(--brand)" }}
+          >
+            Contratar ahora — próximamente
+          </button>
+        )}
+
+        <p className="text-xs text-muted-foreground text-center">
+          Pago seguro con Stripe · ¿Tienes un cupón? Podrás aplicarlo en el
+          pago · Activación inmediata · Sin permanencia
+        </p>
       </div>
     </main>
   );

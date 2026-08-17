@@ -850,6 +850,9 @@ model LandingPage {
   // Tokens (suscripción de consumo). Precio mensual base; los periodos largos
   // son múltiplo exacto (×3/×6/×12). tokenPeriods = periodos ofrecidos.
   tokenMonthlyPriceCents Int    @default(2000)   // 20,00 €/mes
+  // Pronto pago: precio mensual de tokens cuando el cliente paga ANUAL
+  // (modelo unificado — unified-pricing-token-options). Debe ser ≤ estándar.
+  tokenMonthlyPriceAnnualCents Int @default(1500) // 15,00 €/mes
   tokenPeriods        TokenBillingPeriod[] @default([MONTHLY, QUARTERLY, SEMIANNUAL, ANNUAL])
   currency            String    @default("EUR")
   discountEndsAt      DateTime?
@@ -873,6 +876,11 @@ enum TokenBillingPeriod {
   QUARTERLY
   SEMIANNUAL
   ANNUAL
+}
+
+enum TokenProvision {
+  BUNDLED
+  EXTERNAL
 }
 
 /**
@@ -986,6 +994,9 @@ model Purchase {
   feeAmountCents      Int?
   tokenBillingPeriod  TokenBillingPeriod?
   tokenAmountCents    Int?
+  // Modalidad de tokens (modelo unificado): BUNDLED = incluidos con nosotros;
+  // EXTERNAL = el cliente usa su propio proveedor LLM (solo software, anual).
+  tokenProvision      TokenProvision?
   stripeSubscriptionId    String?   // suscripción de tokens
   stripeFeeSubscriptionId String?   // suscripción de renovación anual del fee
   currency            String        @default("EUR")

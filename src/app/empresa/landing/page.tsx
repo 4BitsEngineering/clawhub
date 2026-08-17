@@ -66,6 +66,14 @@ export default async function EmpresaLandingPage() {
       parseFloat((formData.get("tokenMonthlyPrice") as string) ?? "20") * 100,
     );
     const tokenMonthlyPriceCents = isNaN(tokenMonthlyRaw) ? 2000 : tokenMonthlyRaw;
+    // Pronto pago anual: debe ser ≤ precio estándar (se recorta si no).
+    const tokenAnnualRaw = Math.round(
+      parseFloat((formData.get("tokenMonthlyPriceAnnual") as string) ?? "15") * 100,
+    );
+    const tokenMonthlyPriceAnnualCents = Math.min(
+      isNaN(tokenAnnualRaw) ? 1500 : tokenAnnualRaw,
+      tokenMonthlyPriceCents,
+    );
     const tokenPeriods = TOKEN_PERIODS_ORDER.filter(
       (p) => formData.get(`period_${p}`) === "1",
     );
@@ -89,6 +97,7 @@ export default async function EmpresaLandingPage() {
       feeDiscountType,
       feeDiscountPercent,
       tokenMonthlyPriceCents,
+      tokenMonthlyPriceAnnualCents,
       tokenPeriods: finalPeriods,
       discountEndsAt,
       isActive,
@@ -120,6 +129,7 @@ export default async function EmpresaLandingPage() {
   const renewalEuros = (landing.originalPriceCents / 100).toFixed(2);
   const firstYearEuros = (landing.discountPriceCents / 100).toFixed(2);
   const tokenMonthlyEuros = (landing.tokenMonthlyPriceCents / 100).toFixed(2);
+  const tokenAnnualEuros = (landing.tokenMonthlyPriceAnnualCents / 100).toFixed(2);
   const isPercent = landing.feeDiscountType === "PERCENT";
   const percentValue = landing.feeDiscountPercent ?? 0;
   const offeredPeriods = new Set(landing.tokenPeriods);
@@ -281,18 +291,37 @@ export default async function EmpresaLandingPage() {
                 <div className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
                   Tokens · suscripción de consumo
                 </div>
-                <div className="space-y-2 max-w-xs">
-                  <Label htmlFor="tokenMonthlyPrice" className="text-xs">
-                    Precio de tokens (€ / mes)
-                  </Label>
-                  <Input
-                    id="tokenMonthlyPrice"
-                    name="tokenMonthlyPrice"
-                    type="number"
-                    min="0"
-                    step="0.01"
-                    defaultValue={tokenMonthlyEuros}
-                  />
+                <div className="grid sm:grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <Label htmlFor="tokenMonthlyPrice" className="text-xs">
+                      Precio de tokens (€ / mes)
+                    </Label>
+                    <Input
+                      id="tokenMonthlyPrice"
+                      name="tokenMonthlyPrice"
+                      type="number"
+                      min="0"
+                      step="0.01"
+                      defaultValue={tokenMonthlyEuros}
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="tokenMonthlyPriceAnnual" className="text-xs">
+                      Con pago anual (€ / mes)
+                    </Label>
+                    <Input
+                      id="tokenMonthlyPriceAnnual"
+                      name="tokenMonthlyPriceAnnual"
+                      type="number"
+                      min="0"
+                      step="0.01"
+                      defaultValue={tokenAnnualEuros}
+                    />
+                    <p className="text-[11px] text-muted-foreground">
+                      Pronto pago: si el cliente paga el año entero. Debe ser
+                      ≤ que el precio estándar.
+                    </p>
+                  </div>
                 </div>
                 <div className="space-y-2">
                   <Label className="text-xs">Periodos ofrecidos al cliente</Label>

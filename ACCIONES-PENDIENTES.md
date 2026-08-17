@@ -82,6 +82,13 @@ npx supabase functions deploy stripe-webhook --project-ref sbtpydttrswiljnskrsq
 ### Stripe Billing Portal — change `firm-client-portal`
 El portal del cliente (`/firm`) enlaza al Billing Portal de Stripe (facturas + gestión de suscripciones). **Requiere configurarlo una vez**: dashboard de Stripe → Settings → **Billing → Customer portal** → revisar opciones (permitir cancelar suscripción, ver historial de facturas) → **Save**. Sin esto, el botón "Gestionar facturación" dará error (la tarjeta muestra aviso de contactar soporte).
 
+### Redeploy webhook — change `unified-pricing-token-options`
+El webhook cambió (persiste `tokenProvision`; ya no crea la 2ª suscripción del fee en el modelo nuevo). **Redeploy necesario**:
+```bash
+npx supabase functions deploy stripe-webhook --project-ref sbtpydttrswiljnskrsq
+```
+Además: los **cupones** se crean en el dashboard de Stripe (Products → Coupons → + Promotion code); el cliente los introduce en la pantalla de pago. Nota: el cupón descuenta el cobro pero NO la base de comisión.
+
 ### Jubilar el deployment viejo (`clawhub-three.vercel.app`)
 El instalador v0.3.8 lleva esa URL grabada (el configurator también la usa en su env). Hasta jubilarlo, ese deploy corre código antiguo contra la MISMA BD (fuente de bugs fantasma: pareaba sin provisionar el baseline). Fuentes ya actualizadas a `ia-suite-chi` en `ai-office-install-1` y `openclaw-configurator` (carpetas de Descargas).
 
