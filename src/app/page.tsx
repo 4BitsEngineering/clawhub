@@ -39,6 +39,58 @@ const TEAM = [
   ["👥", "Asesoría Laboral", "Nóminas, altas y convenios"],
 ] as const;
 
+// Ejemplos reales de peticiones: lo que le escribes al agente y lo que hace.
+const EXAMPLES = [
+  {
+    ask: "Revisa mi bandeja de esta mañana y proponme una respuesta para cada correo pendiente.",
+    agent: "Agenda y Correo",
+    icon: "📅",
+    result: "Triaje hecho y borradores listos para que solo tengas que aprobar y enviar.",
+  },
+  {
+    ask: "Entra en el portal de mi proveedor, descarga las facturas de julio y archívalas.",
+    agent: "Web y Publicación",
+    icon: "🌐",
+    result: "Navega el portal como lo harías tú, descarga los PDF y los deja ordenados por fecha.",
+  },
+  {
+    ask: "Prepárame un borrador de contrato de prestación de servicios con estos datos.",
+    agent: "Asesoría Jurídica",
+    icon: "⚖️",
+    result: "Borrador redactado con la normativa vigente, listo para tu revisión antes de firmar.",
+  },
+  {
+    ask: "Planifica las publicaciones de la semana y déjame el calendario preparado.",
+    agent: "Redes Sociales",
+    icon: "📣",
+    result: "Propuesta de textos e imágenes para cada red, programada y pendiente de tu visto bueno.",
+  },
+  {
+    ask: "¿Qué plazos fiscales tengo este trimestre y qué me falta por preparar?",
+    agent: "Asesoría Fiscal",
+    icon: "🧾",
+    result: "Calendario de plazos con lo que ya está cubierto y lo que requiere tu atención.",
+  },
+  {
+    ask: "Avísame cada vez que entre un pedido nuevo y regístralo en mi hoja de cálculo.",
+    agent: "Automatizaciones",
+    icon: "⚙️",
+    result: "Monta el flujo, te lo enseña y no lo activa hasta que tú lo apruebes.",
+  },
+  {
+    ask: "Compárame estos tres presupuestos y hazme un informe con tu recomendación.",
+    agent: "Redacción",
+    icon: "✍️",
+    result: "Informe comparativo claro, con tabla de diferencias y una recomendación argumentada.",
+  },
+  {
+    ask: "Calcula el coste de contratar a media jornada con el convenio de oficinas.",
+    agent: "Asesoría Laboral",
+    icon: "👥",
+    result: "Desglose de salario, cotizaciones y coste total de empresa según el convenio.",
+  },
+] as const;
+
 const FAQ = [
   [
     "¿Necesito conocimientos técnicos?",
@@ -124,6 +176,9 @@ export default async function HomePage() {
       <header className="max-w-5xl mx-auto px-6 h-16 flex items-center justify-between">
         <span className="text-lg font-bold tracking-tight">AI&nbsp;Office</span>
         <nav className="flex items-center gap-5 text-sm">
+          <a href="#ejemplos" className="hover:underline" style={{ color: "rgba(245,239,228,0.8)" }}>
+            Ejemplos
+          </a>
           <a href="#precios" className="hover:underline" style={{ color: "rgba(245,239,228,0.8)" }}>
             Precios
           </a>
@@ -268,8 +323,44 @@ export default async function HomePage() {
         </div>
       </div>
 
-      {/* ═══ BANDA NAVY: precios ═══ */}
+      {/* ═══ BANDA NAVY: ejemplos + precios ═══ */}
       <div className="max-w-5xl mx-auto px-6 py-20 space-y-24">
+        {/* ── Ejemplos de uso ── */}
+        <section id="ejemplos" className="space-y-8 scroll-mt-8">
+          <div className="text-center space-y-2">
+            <h2 className="text-3xl sm:text-4xl font-bold" style={{ fontFamily: "Georgia, serif" }}>
+              Pídeselo con tus palabras<span style={{ color: YELLOW }}>.</span>
+            </h2>
+            <p style={{ color: "rgba(245,239,228,0.75)" }}>
+              Ejemplos reales de lo que puedes pedirle a tu equipo desde el
+              primer día.
+            </p>
+          </div>
+          <div className="grid md:grid-cols-2 gap-5">
+            {EXAMPLES.map((ex) => (
+              <div key={ex.ask} className="card-paper rounded-2xl p-6 space-y-4">
+                <p className="text-sm font-medium leading-relaxed">
+                  <span className="text-lg leading-none mr-1" style={{ color: "#d4a514" }}>“</span>
+                  {ex.ask}
+                  <span className="text-lg leading-none ml-1" style={{ color: "#d4a514" }}>”</span>
+                </p>
+                <div className="flex items-start gap-3 border-t border-border pt-3">
+                  <span className="text-xl leading-none">{ex.icon}</span>
+                  <div>
+                    <p className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground">
+                      {ex.agent}
+                    </p>
+                    <p className="text-xs text-muted-foreground mt-0.5">{ex.result}</p>
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+          <p className="text-xs text-center" style={{ color: "rgba(245,239,228,0.55)" }}>
+            Todo queda pendiente de tu aprobación: los agentes preparan, tú decides.
+          </p>
+        </section>
+
         {/* ── Precios ── */}
         <section id="precios" className="space-y-8 scroll-mt-8">
           <div className="text-center space-y-2">
