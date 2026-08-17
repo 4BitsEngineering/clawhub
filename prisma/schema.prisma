@@ -102,7 +102,10 @@ model Firm {
   // versión identifica el release de ese repo.
   openclawVersion  String?
   bridgeVersion    String?
-  overlayId        String?  // "asesoria" | "ai-office" | "content" | ...
+  // "asesoria" | "ai-office" | "content" | ... Este control plane vende
+  // AI-Office: default para que toda firma nueva (webhook, operator, register)
+  // resuelva su bundle OVERLAY en /api/v0/stack-manifest.
+  overlayId        String?  @default("ai-office")
   overlayVersion   String?
   // Auto-aplicar updates al detectarlos. Si false, el admin debe pulsar
   // "Aplicar" manualmente desde la UI clawhub.

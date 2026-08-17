@@ -164,6 +164,9 @@ async function handleCheckoutCompleted(session: Stripe.Checkout.Session) {
       plan: "STARTER",
       seatsPurchased: 1,
       status: "active",
+      // Sin overlayId el instalador falla en stack-manifest ("no overlay
+      // publicado"). Este control plane vende AI-Office.
+      overlayId: "ai-office",
       updatedAt: now,
     })
     .select("id")
