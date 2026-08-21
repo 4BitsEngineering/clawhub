@@ -221,7 +221,7 @@ export async function POST(req: NextRequest) {
   let promoted = await db.firmBaseline.findFirst({
     where: { firmId: pairingToken.firmId, isPromoted: true },
     orderBy: { version: "desc" },
-    select: { id: true, version: true },
+    select: { id: true, version: true, createdBy: true },
   });
 
   // Firmas creadas por compra (sin configurator) no tienen baseline. Provisionar
@@ -231,10 +231,11 @@ export async function POST(req: NextRequest) {
   // del PC) no se pierde; se puede promover un baseline y reintentar la descarga.
   if (!promoted) {
     try {
-      promoted = await provisionDefaultBaseline(
+      const created = await provisionDefaultBaseline(
         pairingToken.firmId,
         pairingToken.firm.name,
       );
+      promoted = created ? { ...created, createdBy: "system-default" } : null;
       await recordActivity({
         kind: "baseline.default_provisioned",
         summary: `Baseline por defecto generado para "${pairingToken.firm.name}" al parear sin configurator`,
@@ -246,6 +247,23 @@ export async function POST(req: NextRequest) {
     } catch (err) {
       // eslint-disable-next-line no-console
       console.error("[pair] Error provisionando baseline por defecto:", err);
+    }
+  } else if (promoted.createdBy === "system-default") {
+    // El baseline por defecto es DERIVADO (plantilla + selección de agentes +
+    // acceso LLM): en cada pair se refresca en sitio para que recoja cambios
+    // posteriores a su creación (p. ej. la provisión de tokens de
+    // litellm-token-provisioning llegó después de la compra original). Los
+    // baselines del configurator/firm_admin NO se tocan. No bloqueante: si
+    // falla el refresco, se sirve tal cual estaba.
+    try {
+      await refreshDefaultBaseline(
+        promoted.id,
+        pairingToken.firmId,
+        pairingToken.firm.name,
+      );
+    } catch (err) {
+      // eslint-disable-next-line no-console
+      console.error("[pair] Error refrescando baseline por defecto:", err);
     }
   }
 
@@ -329,6 +347,41 @@ async function resolveFirmLlm(
     }).catch(() => {});
     return null;
   }
+}
+
+// Regenera los files de un baseline system-default existente con el estado
+// actual (plantilla, selección de agentes de la última compra y acceso LLM).
+async function refreshDefaultBaseline(
+  baselineId: string,
+  firmId: string,
+  firmName: string,
+): Promise<void> {
+  const lastPurchase = await db.purchase.findFirst({
+    where: { firmId },
+    orderBy: { createdAt: "desc" },
+    select: { selectedAgents: true, tokenProvision: true },
+  });
+  const llm = await resolveFirmLlm(firmId, lastPurchase?.tokenProvision ?? null);
+  const files = defaultBaselineFiles(firmName, lastPurchase?.selectedAgents, llm);
+  const totalBytes = files.reduce((s, f) => s + f.sizeBytes, 0);
+  await db.$transaction(async (tx) => {
+    await tx.firmBaselineFile.deleteMany({ where: { baselineId } });
+    await tx.firmBaselineFile.createMany({
+      data: files.map((f) => ({
+        baselineId,
+        path: f.path,
+        category: f.category,
+        content: f.content,
+        sha256: f.sha256,
+        sizeBytes: f.sizeBytes,
+        isBinary: f.isBinary,
+      })),
+    });
+    await tx.firmBaseline.update({
+      where: { id: baselineId },
+      data: { fileCount: files.length, totalBytes },
+    });
+  });
 }
 
 async function provisionDefaultBaseline(
