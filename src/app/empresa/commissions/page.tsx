@@ -125,6 +125,7 @@ export default async function EmpresaCommissionsPage({
           id: true,
           amountCents: true,
           feeAmountCents: true,
+          seats: true,
           status: true,
           commission: { select: { id: true } },
         },
@@ -139,9 +140,13 @@ export default async function EmpresaCommissionsPage({
     if (purchase.status !== "COMPLETED") return;
     if (purchase.commission) return;
 
-    // Base de comisión = fee (excluye tokens). Fallback a amountCents para
-    // compras antiguas anteriores al desglose fee/tokens.
-    const feeBase = purchase.feeAmountCents ?? purchase.amountCents;
+    // Base de comisión = fee (excluye tokens) × seats — el fee de metadata es
+    // unitario (multi-seat-purchases). Fallback a amountCents para compras
+    // antiguas anteriores al desglose fee/tokens (seats=1 en esas).
+    const feeBase =
+      purchase.feeAmountCents != null
+        ? purchase.feeAmountCents * purchase.seats
+        : purchase.amountCents;
 
     try {
       await db.commission.create({
@@ -230,6 +235,8 @@ export default async function EmpresaCommissionsPage({
             buyerName: true,
             buyerEmail: true,
             selectedAgents: true,
+            seats: true,
+            buyerTaxId: true,
           },
           orderBy: { completedAt: "desc" },
         }),
@@ -360,6 +367,10 @@ export default async function EmpresaCommissionsPage({
                               {p.buyerEmail}
                             </div>
                           )}
+                          <div className="text-[11px] text-muted-foreground">
+                            {p.seats > 1 ? `${p.seats} equipos` : "1 equipo"}
+                            {p.buyerTaxId ? ` · ${p.buyerTaxId}` : ""}
+                          </div>
                           <div
                             className="text-[11px] text-muted-foreground mt-0.5"
                             title={resolveTeam(p.selectedAgents)
@@ -374,9 +385,13 @@ export default async function EmpresaCommissionsPage({
                           </div>
                         </TableCell>
                         <TableCell className="tabular-nums font-medium">
-                          {fmt(p.feeAmountCents ?? p.amountCents)}
+                          {fmt(
+                            p.feeAmountCents != null
+                              ? p.feeAmountCents * p.seats
+                              : p.amountCents,
+                          )}
                           {p.feeAmountCents != null &&
-                            p.feeAmountCents !== p.amountCents && (
+                            p.feeAmountCents * p.seats !== p.amountCents && (
                               <div className="text-[11px] text-muted-foreground">
                                 fee (total {fmt(p.amountCents)})
                               </div>

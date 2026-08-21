@@ -110,6 +110,9 @@ model Firm {
   name           String
   plan           FirmPlan @default(STARTER)
   seatsPurchased Int      @default(5)
+  // CIF/NIF de facturación — lo fija la primera compra (multi-seat-purchases);
+  // un mismatch en ampliaciones no lo pisa (queda en Activity para revisión).
+  taxId          String?
   status          String    @default("active")  // active | suspended
   suspendedAt     DateTime?
   suspendedReason String?
@@ -1028,6 +1031,12 @@ model Purchase {
   // ver src/lib/agent-catalog.ts). [] = catálogo completo. El pair genera el
   // baseline por defecto con esta selección (change agent-selection-before-checkout).
   selectedAgents      String[]      @default([])
+  // Nº de equipos (PCs) de esta compra — quantity del line item de Stripe.
+  // La comisión y el presupuesto de tokens escalan con él (multi-seat-purchases).
+  seats               Int           @default(1)
+  // CIF/NIF del comprador (facturación). Normalizado (mayúsculas, sin guiones);
+  // validación laxa — no bloqueamos ids extranjeros.
+  buyerTaxId          String?
   stripeSubscriptionId    String?   // suscripción de tokens
   stripeFeeSubscriptionId String?   // suscripción de renovación anual del fee
   currency            String        @default("EUR")

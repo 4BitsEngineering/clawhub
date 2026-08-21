@@ -112,6 +112,16 @@ async function handleCheckoutCompleted(session: Stripe.Checkout.Session) {
     .split(",")
     .map((s) => s.trim())
     .filter(Boolean);
+  // Multi-seat (multi-seat-purchases): nº de equipos de la compra. La comisión
+  // y el presupuesto de tokens escalan con él. Compat: ausente ⇒ 1.
+  const seats = Math.min(
+    Math.max(parseInt((meta.seats as string | undefined) || "1", 10) || 1, 1),
+    10,
+  );
+  // CIF/NIF de facturación (normalizado en el checkout).
+  const buyerTaxId = (meta.buyerTaxId as string | undefined) || null;
+  // Ampliación explícita: la compra suma seats a esta firma (botón de /firm).
+  const metaFirmId = (meta.firmId as string | undefined) || null;
 
   // Suscripción de tokens creada por el checkout, y el customer para anclar la
   // segunda suscripción (renovación anual del fee).
@@ -162,28 +172,117 @@ async function handleCheckoutCompleted(session: Stripe.Checkout.Session) {
     if (p?.name) firmName = p.name;
   }
 
-  // ── Crear Firm ───────────────────────────────────────────────────────────
-  const { data: firm, error: firmErr } = await db
-    .from("Firm")
-    .insert({
-      id: crypto.randomUUID(),
-      name: firmName,
-      plan: "STARTER",
-      seatsPurchased: 1,
-      status: "active",
-      // Sin overlayId el instalador falla en stack-manifest ("no overlay
-      // publicado"). Este control plane vende AI-Office.
-      overlayId: "ai-office",
-      updatedAt: now,
-    })
-    .select("id")
-    .single();
+  // ── Resolver firma: ampliación vs. nueva (multi-seat-purchases) ──────────
+  // Orden estricto: (1) metadata.firmId (botón "Ampliar equipos" de /firm);
+  // (2) email de un FIRM_ADMIN existente cuya firma tenga la MISMA modalidad;
+  // (3) firma nueva. La ampliación suma seats y NO recrea baseline ni usuario.
+  let firm: { id: string } | null = null;
+  let isExpansion = false;
 
-  if (firmErr || !firm) {
-    throw new Error(
-      `insert Firm falló: ${firmErr?.message ?? "sin fila devuelta"}` +
-        (firmErr?.code ? ` (code ${firmErr.code})` : ""),
-    );
+  if (metaFirmId) {
+    const { data: existing } = await db
+      .from("Firm")
+      .select("id, seatsPurchased, taxId, status")
+      .eq("id", metaFirmId)
+      .maybeSingle();
+    if (existing) {
+      firm = { id: existing.id };
+      isExpansion = true;
+      if (existing.status !== "active") {
+        console.warn(
+          `[stripe-webhook] ⚠ Ampliación sobre firma ${existing.id} con status=${existing.status} — revisar`,
+        );
+      }
+      await db
+        .from("Firm")
+        .update({
+          seatsPurchased: (existing.seatsPurchased ?? 1) + seats,
+          // La primera compra fija el taxId; un mismatch no lo pisa.
+          ...(existing.taxId ? {} : buyerTaxId ? { taxId: buyerTaxId } : {}),
+          updatedAt: now,
+        })
+        .eq("id", existing.id);
+      if (existing.taxId && buyerTaxId && existing.taxId !== buyerTaxId) {
+        console.warn(
+          `[stripe-webhook] ⚠ taxId distinto en ampliación de ${existing.id}: firma=${existing.taxId} compra=${buyerTaxId}`,
+        );
+      }
+    } else {
+      console.warn(
+        `[stripe-webhook] ⚠ metadata.firmId ${metaFirmId} no existe — se crea firma nueva`,
+      );
+    }
+  }
+
+  if (!firm && buyerEmail) {
+    // Red de seguridad: recompra orgánica del mismo comprador. Solo si la
+    // modalidad coincide con la de su firma (no mezclamos BUNDLED/EXTERNAL).
+    const { data: existingAdmin } = await db
+      .from("User")
+      .select("firmId")
+      .eq("email", buyerEmail)
+      .eq("role", "FIRM_ADMIN")
+      .not("firmId", "is", null)
+      .maybeSingle();
+    if (existingAdmin?.firmId) {
+      const { data: lastPurchase } = await db
+        .from("Purchase")
+        .select("tokenProvision")
+        .eq("firmId", existingAdmin.firmId)
+        .eq("status", "COMPLETED")
+        .order("completedAt", { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      if (lastPurchase && lastPurchase.tokenProvision === tokenProvision) {
+        const { data: existing } = await db
+          .from("Firm")
+          .select("id, seatsPurchased, taxId")
+          .eq("id", existingAdmin.firmId)
+          .maybeSingle();
+        if (existing) {
+          firm = { id: existing.id };
+          isExpansion = true;
+          await db
+            .from("Firm")
+            .update({
+              seatsPurchased: (existing.seatsPurchased ?? 1) + seats,
+              ...(existing.taxId ? {} : buyerTaxId ? { taxId: buyerTaxId } : {}),
+              updatedAt: now,
+            })
+            .eq("id", existing.id);
+          console.log(
+            `[stripe-webhook] Recompra de ${buyerEmail} → ampliación de firma ${existing.id} (+${seats} seats)`,
+          );
+        }
+      }
+    }
+  }
+
+  if (!firm) {
+    const { data: created, error: firmErr } = await db
+      .from("Firm")
+      .insert({
+        id: crypto.randomUUID(),
+        name: firmName,
+        plan: "STARTER",
+        seatsPurchased: seats,
+        taxId: buyerTaxId,
+        status: "active",
+        // Sin overlayId el instalador falla en stack-manifest ("no overlay
+        // publicado"). Este control plane vende AI-Office.
+        overlayId: "ai-office",
+        updatedAt: now,
+      })
+      .select("id")
+      .single();
+
+    if (firmErr || !created) {
+      throw new Error(
+        `insert Firm falló: ${firmErr?.message ?? "sin fila devuelta"}` +
+          (firmErr?.code ? ` (code ${firmErr.code})` : ""),
+      );
+    }
+    firm = created;
   }
 
   // ── Crear/actualizar usuario FIRM_ADMIN ──────────────────────────────────
@@ -291,6 +390,8 @@ async function handleCheckoutCompleted(session: Stripe.Checkout.Session) {
       tokenProvision,
       houseSale,
       selectedAgents,
+      seats,
+      buyerTaxId,
       stripeSubscriptionId: tokenSubscriptionId,
       stripeFeeSubscriptionId: feeSubscriptionId,
       currency,
@@ -330,15 +431,25 @@ async function handleCheckoutCompleted(session: Stripe.Checkout.Session) {
 
     if (rep) {
       // Comisión SOLO sobre el fee, nunca sobre el total (excluye tokens).
+      // Multi-seat: el fee de metadata es unitario → base = fee × seats.
       await db.from("Commission").insert({
         id: crypto.randomUUID(),
         purchaseId: purchase.id,
         salesRepId,
         rate: rep.commissionRate,
-        amountCents: Math.round(feeAmountCents * rep.commissionRate),
+        amountCents: Math.round(feeAmountCents * seats * rep.commissionRate),
         status: "PENDING",
       });
     }
+  }
+
+  // ── Hook de tokens (litellm-token-provisioning) ──────────────────────────
+  // Punto de extensión: al cambiar los seats de una firma con team LiteLLM se
+  // actualizará su presupuesto (budget/seat × total). No-op hasta esa spec.
+  if (isExpansion) {
+    console.log(
+      `[stripe-webhook] onSeatsChanged(${firm.id}) — pendiente litellm-token-provisioning`,
+    );
   }
 
   // ── Onboarding: PairingToken + email de bienvenida ───────────────────────

@@ -6,7 +6,12 @@ import { redirect } from "next/navigation";
 import { getSession } from "@/lib/session";
 import { db } from "@/lib/db";
 import { stripe } from "@/lib/stripe";
-import { createUnifiedCheckout } from "@/lib/checkout";
+import {
+  createUnifiedCheckout,
+  normalizeTaxId,
+  clampSeats,
+  MAX_SEATS,
+} from "@/lib/checkout";
 import {
   TOKEN_PERIODS_ORDER,
   TOKEN_PERIOD_LABEL,
@@ -117,7 +122,9 @@ export default async function HomePage({
 }: {
   searchParams: Promise<{ err?: string }>;
 }) {
-  const emailError = (await searchParams)?.err === "email";
+  const err = (await searchParams)?.err;
+  const emailError = err === "email";
+  const taxError = err === "taxid";
   const session = await getSession();
   if (session?.user?.role === "OPERATOR") redirect("/operator");
   if (session?.user?.role === "EMPRESA") redirect("/empresa");
@@ -138,6 +145,16 @@ export default async function HomePage({
     const email =
       (provision === "EXTERNAL" ? emailAlt || emailMain : emailMain || emailAlt);
     if (!email) redirect("/?err=email#precios");
+
+    // CIF/NIF (facturación) y nº de equipos — mismo patrón por-tarjeta.
+    const taxMain = normalizeTaxId((formData.get("taxId") as string) ?? "");
+    const taxAlt = normalizeTaxId((formData.get("taxIdAlt") as string) ?? "");
+    const buyerTaxId =
+      provision === "EXTERNAL" ? taxAlt || taxMain : taxMain || taxAlt;
+    if (!buyerTaxId) redirect("/?err=taxid#precios");
+    const seats = clampSeats(
+      provision === "EXTERNAL" ? formData.get("seatsAlt") : formData.get("seats"),
+    );
     const period =
       (formData.get("tokenPeriod") as TokenBillingPeriod | null) ?? null;
 
@@ -150,6 +167,8 @@ export default async function HomePage({
       trackingToken: null,
       houseSale: true,
       selectedAgents: selectionFromFormData(formData),
+      seats,
+      buyerTaxId,
     });
     if (url) redirect(url);
   }
@@ -383,7 +402,7 @@ export default async function HomePage({
             <p style={{ color: "rgba(245,239,228,0.75)" }}>
               Sin costes ocultos. Cancela cuando quieras.
             </p>
-            {emailError && (
+            {(emailError || taxError) && (
               <p
                 className="inline-block text-sm font-semibold px-4 py-2 rounded-xl"
                 style={{
@@ -392,8 +411,9 @@ export default async function HomePage({
                   border: "1px solid rgba(179,38,30,0.4)",
                 }}
               >
-                Escribe tu email de empresa en la tarjeta del plan elegido para
-                continuar con el pago.
+                {emailError
+                  ? "Escribe tu email de empresa en la tarjeta del plan elegido para continuar con el pago."
+                  : "Escribe un CIF/NIF válido en la tarjeta del plan elegido para continuar con el pago."}
               </p>
             )}
           </div>
@@ -426,7 +446,8 @@ export default async function HomePage({
                   <div className="space-y-1 pt-1">
                     <h3 className="text-xl font-bold">Todo incluido</h3>
                     <p className="text-sm text-muted-foreground">
-                      Software + consumo de IA en una sola cuota.
+                      Software + consumo de IA en una sola cuota. Precios por
+                      equipo.
                     </p>
                   </div>
                   <div className="space-y-4">
@@ -458,6 +479,27 @@ export default async function HomePage({
                         </label>
                       ))}
                     </div>
+                    <label className="flex items-center justify-between gap-3 rounded-xl border border-border px-4 py-3">
+                      <span className="text-sm font-medium">¿Cuántos equipos?</span>
+                      <select
+                        name="seats"
+                        defaultValue="1"
+                        className="h-9 rounded-md border border-border bg-white px-2 text-sm tabular-nums"
+                      >
+                        {Array.from({ length: MAX_SEATS }, (_, i) => (
+                          <option key={i + 1} value={i + 1}>
+                            {i + 1}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+                    <input
+                      type="text"
+                      name="taxId"
+                      placeholder="CIF / NIF (facturación)"
+                      autoComplete="off"
+                      className={emailInputCls}
+                    />
                     <input
                       type="email"
                       name="email"
@@ -490,8 +532,29 @@ export default async function HomePage({
                     <span className="text-4xl font-bold tracking-tight tabular-nums">
                       {softwarePrice}
                     </span>
-                    <span className="text-muted-foreground"> / año</span>
+                    <span className="text-muted-foreground"> / año por equipo</span>
                   </div>
+                  <label className="flex items-center justify-between gap-3 rounded-xl border border-border px-4 py-3">
+                    <span className="text-sm font-medium">¿Cuántos equipos?</span>
+                    <select
+                      name="seatsAlt"
+                      defaultValue="1"
+                      className="h-9 rounded-md border border-border bg-white px-2 text-sm tabular-nums"
+                    >
+                      {Array.from({ length: MAX_SEATS }, (_, i) => (
+                        <option key={i + 1} value={i + 1}>
+                          {i + 1}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                  <input
+                    type="text"
+                    name="taxIdAlt"
+                    placeholder="CIF / NIF (facturación)"
+                    autoComplete="off"
+                    className={emailInputCls}
+                  />
                   <input
                     type="email"
                     name="emailAlt"

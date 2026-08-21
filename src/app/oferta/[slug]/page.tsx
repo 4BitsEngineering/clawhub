@@ -3,7 +3,12 @@ import { after } from "next/server";
 import { cookies } from "next/headers";
 import { db } from "@/lib/db";
 import { stripe } from "@/lib/stripe";
-import { createUnifiedCheckout } from "@/lib/checkout";
+import {
+  createUnifiedCheckout,
+  normalizeTaxId,
+  clampSeats,
+  MAX_SEATS,
+} from "@/lib/checkout";
 import {
   TOKEN_PERIODS_ORDER,
   TOKEN_PERIOD_LABEL,
@@ -39,7 +44,9 @@ export default async function LandingPublicPage({
   searchParams: Promise<{ err?: string }>;
 }) {
   const { slug } = await params;
-  const emailError = (await searchParams)?.err === "email";
+  const err = (await searchParams)?.err;
+  const emailError = err === "email";
+  const taxError = err === "taxid";
 
   const landing = await db.landingPage.findUnique({ where: { slug } });
   if (!landing || !landing.isActive) notFound();
@@ -67,6 +74,16 @@ export default async function LandingPublicPage({
       provision === "EXTERNAL" ? emailAlt || emailMain : emailMain || emailAlt;
     const customerEmail = formEmail || (await emailFromAttribution()) || null;
     if (!customerEmail) redirect(`/oferta/${slug}?err=email`);
+
+    // CIF/NIF (facturación) y nº de equipos — mismo patrón por-tarjeta.
+    const taxMain = normalizeTaxId((formData.get("taxId") as string) ?? "");
+    const taxAlt = normalizeTaxId((formData.get("taxIdAlt") as string) ?? "");
+    const buyerTaxId =
+      provision === "EXTERNAL" ? taxAlt || taxMain : taxMain || taxAlt;
+    if (!buyerTaxId) redirect(`/oferta/${slug}?err=taxid`);
+    const seats = clampSeats(
+      provision === "EXTERNAL" ? formData.get("seatsAlt") : formData.get("seats"),
+    );
     const period =
       (formData.get("tokenPeriod") as TokenBillingPeriod | null) ?? null;
 
@@ -78,6 +95,8 @@ export default async function LandingPublicPage({
       trackingToken: attribution,
       houseSale: false,
       selectedAgents: selectionFromFormData(formData),
+      seats,
+      buyerTaxId,
     });
     if (url) redirect(url);
   }
@@ -178,7 +197,7 @@ export default async function LandingPublicPage({
               <AgentPicker />
             </section>
 
-            {emailError && (
+            {(emailError || taxError) && (
               <p
                 className="text-center text-sm font-semibold px-4 py-2 rounded-xl max-w-md mx-auto"
                 style={{
@@ -187,8 +206,9 @@ export default async function LandingPublicPage({
                   border: "1px solid rgba(179,38,30,0.4)",
                 }}
               >
-                Escribe tu email de empresa en la tarjeta del plan elegido para
-                continuar con el pago.
+                {emailError
+                  ? "Escribe tu email de empresa en la tarjeta del plan elegido para continuar con el pago."
+                  : "Escribe un CIF/NIF válido en la tarjeta del plan elegido para continuar con el pago."}
               </p>
             )}
 
@@ -241,6 +261,27 @@ export default async function LandingPublicPage({
                         </label>
                       ))}
                     </div>
+                    <label className="flex items-center justify-between gap-3 rounded-xl border border-border px-4 py-3">
+                      <span className="text-sm font-medium">¿Cuántos equipos?</span>
+                      <select
+                        name="seats"
+                        defaultValue="1"
+                        className="h-9 rounded-md border border-border bg-background px-2 text-sm tabular-nums"
+                      >
+                        {Array.from({ length: MAX_SEATS }, (_, i) => (
+                          <option key={i + 1} value={i + 1}>
+                            {i + 1}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+                    <input
+                      type="text"
+                      name="taxId"
+                      placeholder="CIF / NIF (facturación)"
+                      autoComplete="off"
+                      className="w-full px-4 py-3 rounded-xl border border-border bg-background text-center text-base focus:outline-none focus:ring-2 focus:ring-[var(--brand)]"
+                    />
                     <input
                       type="email"
                       name="email"
@@ -288,6 +329,27 @@ export default async function LandingPublicPage({
                   )}
                 </div>
 
+                <label className="flex items-center justify-between gap-3 rounded-xl border border-border px-4 py-3">
+                  <span className="text-sm font-medium">¿Cuántos equipos?</span>
+                  <select
+                    name="seatsAlt"
+                    defaultValue="1"
+                    className="h-9 rounded-md border border-border bg-background px-2 text-sm tabular-nums"
+                  >
+                    {Array.from({ length: MAX_SEATS }, (_, i) => (
+                      <option key={i + 1} value={i + 1}>
+                        {i + 1}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <input
+                  type="text"
+                  name="taxIdAlt"
+                  placeholder="CIF / NIF (facturación)"
+                  autoComplete="off"
+                  className="w-full px-4 py-3 rounded-xl border border-border bg-background text-center text-base focus:outline-none focus:ring-2 focus:ring-[var(--brand)]"
+                />
                 <input
                   type="email"
                   name="emailAlt"

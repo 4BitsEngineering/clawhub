@@ -29,7 +29,29 @@ export type UnifiedCheckoutInput = {
   // Equipo elegido en la landing (ids del catálogo; se sanea aquí).
   // undefined/[] tras sanear = catálogo completo → no viaja en metadata.
   selectedAgents?: string[];
+  // Nº de equipos (quantity del line item). Clamp 1–10 (multi-seat-purchases).
+  seats?: number;
+  // CIF/NIF normalizado (facturación). Se valida en el server action.
+  buyerTaxId?: string;
+  // Ampliación: la compra se registra sobre esta firma (botón de /firm).
+  firmId?: string;
 };
+
+export const MAX_SEATS = 10;
+
+// Normaliza un CIF/NIF/NIE: mayúsculas, sin espacios ni guiones. Devuelve ""
+// si tras normalizar no pasa la validación LAXA (8–12 alfanuméricos) — no
+// verificamos checksum ni bloqueamos identificadores extranjeros.
+export function normalizeTaxId(raw: string): string {
+  const s = (raw ?? "").toUpperCase().replace(/[\s\-.]/g, "");
+  return /^[A-Z0-9]{8,12}$/.test(s) ? s : "";
+}
+
+export function clampSeats(raw: unknown): number {
+  const n = Math.trunc(Number(raw));
+  if (!Number.isFinite(n) || n < 1) return 1;
+  return Math.min(n, MAX_SEATS);
+}
 
 // Devuelve la URL de la sesión de Stripe, o null si no se pudo crear
 // (Stripe sin configurar, landing inexistente o periodo no ofrecido).
@@ -86,19 +108,27 @@ export async function createUnifiedCheckout(
             interval_count: interval.interval_count,
           },
         },
-        quantity: 1,
+        // Multi-seat: N × cuota unitaria como quantity — el recibo muestra
+        // "N × …" y los cupones porcentuales aplican bien.
+        quantity: clampSeats(input.seats ?? 1),
       },
     ],
     metadata: {
       trackingToken: input.trackingToken ?? "",
       landingSlug: input.slug,
       tokenProvision: input.provision,
+      // Software efectivo UNITARIO — el webhook multiplica por seats para la
+      // base de comisión (compat: compras antiguas sin seats ⇒ 1).
       feeAmountCents: String(softwareCents),
       tokenBillingPeriod: period ?? "",
       tokenAmountCents: tokenAnnualCents != null ? String(tokenAnnualCents) : "",
       houseSale: input.houseSale ? "1" : "",
       // ids con coma (~130 chars con los 14; límite Stripe 500). "" = todos.
       selectedAgents: sanitizeSelection(input.selectedAgents ?? []).join(","),
+      seats: String(clampSeats(input.seats ?? 1)),
+      buyerTaxId: input.buyerTaxId ?? "",
+      // Ampliación sobre firma existente (botón "Ampliar equipos" de /firm).
+      firmId: input.firmId ?? "",
     },
     customer_email: input.email,
     success_url: `${appUrl}/oferta/${input.slug}/success?session_id={CHECKOUT_SESSION_ID}`,

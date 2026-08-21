@@ -7,9 +7,11 @@ import { revalidatePath } from "next/cache";
 import { db } from "@/lib/db";
 import { resolveTeam } from "@/lib/agent-catalog";
 import { stripe } from "@/lib/stripe";
+import { createUnifiedCheckout, clampSeats, MAX_SEATS } from "@/lib/checkout";
 import { generatePairingCode } from "@/lib/tokens";
 import { requireFirmAdmin } from "@/lib/session";
 import { SignOutButton } from "@/components/sign-out-button";
+import type { TokenBillingPeriod } from "@/generated/prisma/client";
 
 export const dynamic = "force-dynamic";
 
@@ -30,12 +32,13 @@ function fmtInt(n: number) {
 export default async function FirmPortalPage({
   searchParams,
 }: {
-  searchParams: Promise<{ billing?: string }>;
+  searchParams: Promise<{ billing?: string; expand?: string }>;
 }) {
   const session = await requireFirmAdmin();
   const firmId = session.user.firmId;
   const params = await searchParams;
   const billingError = params?.billing === "err";
+  const expandError = params?.expand === "err";
 
   // ── Actions ────────────────────────────────────────────────────────────────
 
@@ -59,6 +62,40 @@ export default async function FirmPortalPage({
       },
     });
     revalidatePath("/firm");
+  }
+
+  async function expandSeatsAction(formData: FormData) {
+    "use server";
+    const s = await requireFirmAdmin();
+    const fid = s.user.firmId;
+    const seats = clampSeats(formData.get("seats"));
+
+    // La ampliación hereda modalidad y periodo de la última compra; el firmId
+    // en metadata hace que el webhook sume seats en vez de crear firma nueva.
+    // Sin comisión de captación (houseSale + sin tracking).
+    const [firm, last] = await Promise.all([
+      db.firm.findUnique({ where: { id: fid }, select: { taxId: true } }),
+      db.purchase.findFirst({
+        where: { firmId: fid, status: "COMPLETED" },
+        orderBy: { completedAt: "desc" },
+        select: { tokenProvision: true, tokenBillingPeriod: true },
+      }),
+    ]);
+    if (!last) redirect("/firm?expand=err");
+
+    const url = await createUnifiedCheckout({
+      slug: "ai-office",
+      provision: last.tokenProvision === "EXTERNAL" ? "EXTERNAL" : "BUNDLED",
+      period: (last.tokenBillingPeriod as TokenBillingPeriod | null) ?? null,
+      email: s.user.email ?? "",
+      trackingToken: null,
+      houseSale: true,
+      seats,
+      buyerTaxId: firm?.taxId ?? undefined,
+      firmId: fid,
+    });
+    if (!url) redirect("/firm?expand=err");
+    redirect(url);
   }
 
   async function billingPortalAction() {
@@ -243,7 +280,8 @@ export default async function FirmPortalPage({
             style={{ backgroundColor: CREAM, color: NAVY_DEEP }}
           >
             <p className="text-[11px] font-bold uppercase tracking-[0.14em]" style={{ color: "#8a8574" }}>
-              Código de activación
+              Código de activación · {seatsUsed} de {firm.seatsPurchased}{" "}
+              equipos activados
             </p>
             {activeCode ? (
               <>
@@ -395,6 +433,54 @@ export default async function FirmPortalPage({
               ? "Tu plan incluye el equipo completo de especialistas."
               : "El equipo que elegiste al contratar. Para ampliarlo, escríbenos a info@iaofi.com."}
           </p>
+        </section>
+
+        {/* ── Ampliar equipos ── */}
+        <section
+          className="rounded-2xl p-7 space-y-4 shadow-xl"
+          style={{ backgroundColor: CREAM, color: NAVY_DEEP }}
+        >
+          <p className="text-[11px] font-bold uppercase tracking-[0.14em]" style={{ color: "#8a8574" }}>
+            Ampliar
+          </p>
+          <h2 className="text-2xl font-bold" style={{ fontFamily: SERIF }}>
+            ¿Más equipos?<span style={{ color: YELLOW }}>.</span>
+          </h2>
+          <p className="text-sm leading-relaxed" style={{ color: "#4a4a42" }}>
+            Añade AI-Office a más ordenadores de tu empresa con las mismas
+            condiciones de tu plan. Tras el pago podrás generar los códigos de
+            activación nuevos desde aquí.
+          </p>
+          {expandError && (
+            <p className="text-sm font-semibold" style={{ color: "#b3261e" }}>
+              No hemos podido iniciar la ampliación. Escríbenos a
+              info@iaofi.com y lo resolvemos.
+            </p>
+          )}
+          <form action={expandSeatsAction} className="flex flex-wrap items-center gap-3">
+            <label className="flex items-center gap-2 text-sm font-medium">
+              Equipos a añadir
+              <select
+                name="seats"
+                defaultValue="1"
+                className="h-10 rounded-lg px-2 text-sm tabular-nums"
+                style={{ border: `1px solid rgba(8,33,48,0.25)`, backgroundColor: "#fff" }}
+              >
+                {Array.from({ length: MAX_SEATS }, (_, i) => (
+                  <option key={i + 1} value={i + 1}>
+                    {i + 1}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <button
+              type="submit"
+              className="rounded-xl px-6 py-3 font-semibold text-sm transition-opacity hover:opacity-90"
+              style={{ backgroundColor: NAVY, color: CREAM }}
+            >
+              Ampliar ahora →
+            </button>
+          </form>
         </section>
 
         {/* Pie */}
