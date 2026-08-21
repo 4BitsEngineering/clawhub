@@ -64,3 +64,6 @@ logs/
 
 .vercel
 .env*.local
+
+# Documentación LiteLLM con credenciales — nunca commitear
+doc-litellm/
