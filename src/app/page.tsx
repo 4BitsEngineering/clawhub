@@ -112,7 +112,12 @@ const FAQ = [
   ],
 ] as const;
 
-export default async function HomePage() {
+export default async function HomePage({
+  searchParams,
+}: {
+  searchParams: Promise<{ err?: string }>;
+}) {
+  const emailError = (await searchParams)?.err === "email";
   const session = await getSession();
   if (session?.user?.role === "OPERATOR") redirect("/operator");
   if (session?.user?.role === "EMPRESA") redirect("/empresa");
@@ -124,10 +129,15 @@ export default async function HomePage() {
 
   async function buyAction(formData: FormData) {
     "use server";
-    const email = ((formData.get("email") as string) ?? "").trim().toLowerCase();
-    if (!email) return;
     const provision =
       formData.get("tokenProvision") === "EXTERNAL" ? "EXTERNAL" : "BUNDLED";
+    // Cada tarjeta lleva su propio campo de email (email / emailAlt) para que
+    // el campo esté junto al botón de pago. Manda el de la tarjeta usada.
+    const emailMain = ((formData.get("email") as string) ?? "").trim().toLowerCase();
+    const emailAlt = ((formData.get("emailAlt") as string) ?? "").trim().toLowerCase();
+    const email =
+      (provision === "EXTERNAL" ? emailAlt || emailMain : emailMain || emailAlt);
+    if (!email) redirect("/?err=email#precios");
     const period =
       (formData.get("tokenPeriod") as TokenBillingPeriod | null) ?? null;
 
@@ -373,6 +383,19 @@ export default async function HomePage() {
             <p style={{ color: "rgba(245,239,228,0.75)" }}>
               Sin costes ocultos. Cancela cuando quieras.
             </p>
+            {emailError && (
+              <p
+                className="inline-block text-sm font-semibold px-4 py-2 rounded-xl"
+                style={{
+                  backgroundColor: "rgba(179,38,30,0.15)",
+                  color: "#ffb4a9",
+                  border: "1px solid rgba(179,38,30,0.4)",
+                }}
+              >
+                Escribe tu email de empresa en la tarjeta del plan elegido para
+                continuar con el pago.
+              </p>
+            )}
           </div>
 
           {stripeEnabled && landing ? (
@@ -384,22 +407,12 @@ export default async function HomePage() {
                     Elige tu equipo<span style={{ color: YELLOW }}>.</span>
                   </h3>
                   <p className="text-sm" style={{ color: "rgba(245,239,228,0.75)" }}>
-                    Marca los especialistas que necesita tu negocio. El precio no
+                    Toca un especialista para quitarlo o añadirlo. El precio no
                     cambia por el número de especialistas.
                   </p>
                 </div>
                 <AgentPicker />
               </section>
-
-              {/* ── Email (común a ambas modalidades) ── */}
-              <input
-                type="email"
-                name="email"
-                required
-                placeholder="Tu email de empresa"
-                autoComplete="email"
-                className={`${emailInputCls} max-w-md mx-auto block text-[#082130]`}
-              />
 
               <div className="grid md:grid-cols-2 gap-6 items-start max-w-4xl mx-auto">
                 {/* Todo incluido */}
@@ -445,6 +458,13 @@ export default async function HomePage() {
                         </label>
                       ))}
                     </div>
+                    <input
+                      type="email"
+                      name="email"
+                      placeholder="Tu email de empresa"
+                      autoComplete="email"
+                      className={emailInputCls}
+                    />
                     <button
                       type="submit"
                       name="tokenProvision"
@@ -472,6 +492,13 @@ export default async function HomePage() {
                     </span>
                     <span className="text-muted-foreground"> / año</span>
                   </div>
+                  <input
+                    type="email"
+                    name="emailAlt"
+                    placeholder="Tu email de empresa"
+                    autoComplete="email"
+                    className={emailInputCls}
+                  />
                   <button
                     type="submit"
                     name="tokenProvision"

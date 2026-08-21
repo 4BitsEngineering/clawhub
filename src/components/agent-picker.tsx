@@ -1,52 +1,80 @@
 // Selector de equipo (change agent-selection-before-checkout).
-// Server component sin estado: checkboxes nativos dentro del form de compra.
-// Todos marcados por defecto; los MANDATORY (planner) van bloqueados con un
-// hidden (los inputs disabled no se envían). El server action lee los campos
-// agent_<id> con selectionFromFormData (agent-catalog.ts).
+// Server component sin estado: cada agente es una tarjeta-chip clicable con el
+// checkbox oculto (sr-only) y el estado pintado por CSS (:has(:checked)):
+// apagada sobre el navy cuando está fuera, crema con borde amarillo y tic
+// cuando está dentro. Los MANDATORY (planner) van fijos con un hidden (los
+// inputs disabled no se envían). El server action lee los campos agent_<id>
+// con selectionFromFormData (agent-catalog.ts).
 import { AGENT_CATALOG, MANDATORY_AGENTS } from "@/lib/agent-catalog";
+
+const CREAM = "#f5efe4";
+const NAVY_DEEP = "#082130";
+const YELLOW = "#f2c94c";
+
+function CheckBubble() {
+  return (
+    <span
+      className="absolute top-2 right-2 hidden h-5 w-5 items-center justify-center rounded-full text-[11px] font-bold group-has-[:checked]:flex"
+      style={{ backgroundColor: YELLOW, color: NAVY_DEEP }}
+    >
+      ✓
+    </span>
+  );
+}
 
 export function AgentPicker() {
   const mandatory = new Set<string>(MANDATORY_AGENTS);
   return (
-    <div className="space-y-4">
-      <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-3">
-        {AGENT_CATALOG.map((a) => {
-          const locked = mandatory.has(a.agent);
+    <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3">
+      {AGENT_CATALOG.map((a) => {
+        const locked = mandatory.has(a.agent);
+        if (locked) {
           return (
-            <label
+            <div
               key={a.agent}
-              className={`card-paper rounded-xl p-4 flex items-start gap-3 ${
-                locked ? "" : "cursor-pointer"
-              } has-[:checked]:ring-2 has-[:checked]:ring-[var(--brand)]/40`}
+              title={a.blurb}
+              className="relative rounded-2xl p-4 flex flex-col items-center gap-1.5 text-center shadow-lg"
+              style={{ backgroundColor: CREAM, color: NAVY_DEEP, border: `2px solid ${YELLOW}` }}
             >
-              {locked ? (
-                <>
-                  <input type="checkbox" checked disabled className="mt-1 h-4 w-4 accent-[var(--brand)]" />
-                  <input type="hidden" name={`agent_${a.agent}`} value="1" />
-                </>
-              ) : (
-                <input
-                  type="checkbox"
-                  name={`agent_${a.agent}`}
-                  value="1"
-                  defaultChecked
-                  className="mt-1 h-4 w-4 accent-[var(--brand)]"
-                />
-              )}
-              <span className="min-w-0">
-                <span className="flex items-center gap-1.5 text-sm font-semibold">
-                  <span>{a.icon}</span> {a.displayName}
-                </span>
-                <span className="block text-[11px] text-muted-foreground mt-0.5 leading-snug">
-                  {locked
-                    ? "Incluido siempre — coordina a tu equipo."
-                    : a.blurb.split(".")[0] + "."}
-                </span>
+              <input type="hidden" name={`agent_${a.agent}`} value="1" />
+              <span
+                className="absolute top-2 right-2 flex h-5 w-5 items-center justify-center rounded-full text-[11px] font-bold"
+                style={{ backgroundColor: YELLOW, color: NAVY_DEEP }}
+              >
+                ✓
               </span>
-            </label>
+              <span className="text-3xl leading-none">{a.icon}</span>
+              <span className="text-sm font-semibold leading-tight">{a.displayName}</span>
+              <span
+                className="text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full"
+                style={{ backgroundColor: "rgba(8,33,48,0.08)", color: "#6f6a5c" }}
+              >
+                siempre incluido
+              </span>
+            </div>
           );
-        })}
-      </div>
+        }
+        return (
+          <label
+            key={a.agent}
+            title={a.blurb}
+            className="group relative cursor-pointer rounded-2xl p-4 flex flex-col items-center gap-1.5 text-center transition-all duration-150 border-2 border-transparent bg-white/5 text-[color:rgba(245,239,228,0.55)] hover:bg-white/10 has-[:checked]:bg-[#f5efe4] has-[:checked]:text-[#082130] has-[:checked]:border-[#f2c94c] has-[:checked]:shadow-lg"
+          >
+            <input
+              type="checkbox"
+              name={`agent_${a.agent}`}
+              value="1"
+              defaultChecked
+              className="sr-only"
+            />
+            <CheckBubble />
+            <span className="text-3xl leading-none transition-transform group-has-[:checked]:scale-105">
+              {a.icon}
+            </span>
+            <span className="text-sm font-semibold leading-tight">{a.displayName}</span>
+          </label>
+        );
+      })}
     </div>
   );
 }

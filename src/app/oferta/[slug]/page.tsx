@@ -33,10 +33,13 @@ export const dynamic = "force-dynamic";
 
 export default async function LandingPublicPage({
   params,
+  searchParams,
 }: {
   params: Promise<{ slug: string }>;
+  searchParams: Promise<{ err?: string }>;
 }) {
   const { slug } = await params;
+  const emailError = (await searchParams)?.err === "email";
 
   const landing = await db.landingPage.findUnique({ where: { slug } });
   if (!landing || !landing.isActive) notFound();
@@ -50,18 +53,20 @@ export default async function LandingPublicPage({
     const cookieStore = await cookies();
     const attribution = cookieStore.get("clawhub-attribution")?.value ?? null;
 
-    // Email: el que escribe el cliente en la landing; si no, el del prospect
-    // atribuido por tracking. Siempre se pasa a Stripe (checkout no lo pide).
-    const formEmail = ((formData.get("email") as string) ?? "")
-      .trim()
-      .toLowerCase();
-    const customerEmail = formEmail || (await emailFromAttribution()) || null;
-    if (!customerEmail) return;
-
     // Checkout unificado compartido (src/lib/checkout.ts). Modalidad BUNDLED
     // (cuota software+tokens) o EXTERNAL (solo software, anual).
     const provision =
       formData.get("tokenProvision") === "EXTERNAL" ? "EXTERNAL" : "BUNDLED";
+
+    // Email: cada tarjeta lleva su campo (email / emailAlt) junto a su botón;
+    // manda el de la tarjeta usada. Si no, el del prospect atribuido por
+    // tracking. Siempre se pasa a Stripe (checkout no lo pide).
+    const emailMain = ((formData.get("email") as string) ?? "").trim().toLowerCase();
+    const emailAlt = ((formData.get("emailAlt") as string) ?? "").trim().toLowerCase();
+    const formEmail =
+      provision === "EXTERNAL" ? emailAlt || emailMain : emailMain || emailAlt;
+    const customerEmail = formEmail || (await emailFromAttribution()) || null;
+    if (!customerEmail) redirect(`/oferta/${slug}?err=email`);
     const period =
       (formData.get("tokenPeriod") as TokenBillingPeriod | null) ?? null;
 
@@ -166,23 +171,26 @@ export default async function LandingPublicPage({
                   Elige tu equipo<span style={{ color: "#f2c94c" }}>.</span>
                 </h2>
                 <p className="text-sm" style={{ color: "rgba(245,239,228,0.75)" }}>
-                  Marca los especialistas que necesita tu negocio. El precio no
+                  Toca un especialista para quitarlo o añadirlo. El precio no
                   cambia por el número de especialistas.
                 </p>
               </div>
               <AgentPicker />
             </section>
 
-            {/* ── Email (común a ambas modalidades) ── */}
-            <input
-              type="email"
-              name="email"
-              required
-              defaultValue={knownEmail ?? undefined}
-              placeholder="Tu email de empresa"
-              autoComplete="email"
-              className="w-full max-w-md mx-auto block px-4 py-3 rounded-xl border border-border bg-white text-center text-base text-[#082130] focus:outline-none focus:ring-2 focus:ring-[var(--brand)]"
-            />
+            {emailError && (
+              <p
+                className="text-center text-sm font-semibold px-4 py-2 rounded-xl max-w-md mx-auto"
+                style={{
+                  backgroundColor: "rgba(179,38,30,0.15)",
+                  color: "#ffb4a9",
+                  border: "1px solid rgba(179,38,30,0.4)",
+                }}
+              >
+                Escribe tu email de empresa en la tarjeta del plan elegido para
+                continuar con el pago.
+              </p>
+            )}
 
             <div className="grid md:grid-cols-2 gap-6 items-start">
               {/* ── Modalidad 1: Todo incluido (recomendado) ── */}
@@ -233,6 +241,14 @@ export default async function LandingPublicPage({
                         </label>
                       ))}
                     </div>
+                    <input
+                      type="email"
+                      name="email"
+                      defaultValue={knownEmail ?? undefined}
+                      placeholder="Tu email de empresa"
+                      autoComplete="email"
+                      className="w-full px-4 py-3 rounded-xl border border-border bg-background text-center text-base focus:outline-none focus:ring-2 focus:ring-[var(--brand)]"
+                    />
                     <button
                       type="submit"
                       name="tokenProvision"
@@ -272,6 +288,14 @@ export default async function LandingPublicPage({
                   )}
                 </div>
 
+                <input
+                  type="email"
+                  name="emailAlt"
+                  defaultValue={knownEmail ?? undefined}
+                  placeholder="Tu email de empresa"
+                  autoComplete="email"
+                  className="w-full px-4 py-3 rounded-xl border border-border bg-background text-center text-base focus:outline-none focus:ring-2 focus:ring-[var(--brand)]"
+                />
                 <button
                   type="submit"
                   name="tokenProvision"
