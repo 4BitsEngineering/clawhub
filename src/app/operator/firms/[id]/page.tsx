@@ -4,7 +4,13 @@ import { revalidatePath } from "next/cache";
 import { db } from "@/lib/db";
 import { generatePairingCode } from "@/lib/tokens";
 import { requireOperator } from "@/lib/session";
-import { recordActivity } from "@/lib/activity";
+import { recordActivity, systemActor } from "@/lib/activity";
+import {
+  blockKey,
+  unblockKey,
+  teamInfo,
+  litellmAliasFor,
+} from "@/lib/litellm";
 import { AutoRefresh } from "@/components/auto-refresh";
 import { OperatorShell } from "@/components/operator-shell";
 import { FirmSubnav } from "@/components/firm-subnav";
@@ -52,6 +58,12 @@ export default async function OperatorFirmDetailPage({
 
   if (!firm) notFound();
 
+  // Gasto/presupuesto del team de tokens — best-effort: el panel no se cae si
+  // el proxy no responde.
+  const tokenSpend = firm.litellmTeamId
+    ? await teamInfo(firm.litellmTeamId).catch(() => null)
+    : null;
+
   async function generatePairingTokenAction() {
     "use server";
     await requireOperator(); // server action ≠ render: reautenticar aquí
@@ -62,6 +74,33 @@ export default async function OperatorFirmDetailPage({
         expiresAt: new Date(Date.now() + 10 * 60 * 1000),
       },
     });
+    revalidatePath(`/operator/firms/${id}`);
+  }
+
+  // Block/unblock manual de la virtual key de tokens (litellm-token-provisioning)
+  async function setTokensBlockedAction(formData: FormData) {
+    "use server";
+    await requireOperator();
+    const block = formData.get("block") === "1";
+    const f = await db.firm.findUnique({
+      where: { id },
+      select: { litellmKeyId: true, tokensBlocked: true },
+    });
+    if (!f?.litellmKeyId || f.tokensBlocked === block) return;
+    try {
+      if (block) await blockKey(f.litellmKeyId);
+      else await unblockKey(f.litellmKeyId);
+      await db.firm.update({ where: { id }, data: { tokensBlocked: block } });
+      await recordActivity({
+        kind: block ? "tokens.blocked" : "tokens.unblocked",
+        summary: `Tokens ${block ? "bloqueados" : "desbloqueados"} manualmente por el operator`,
+        firmId: id,
+        actor: systemActor("operator-panel"),
+      });
+    } catch (err) {
+      // eslint-disable-next-line no-console
+      console.error("[operator] Error en block/unblock de tokens:", err);
+    }
     revalidatePath(`/operator/firms/${id}`);
   }
 
@@ -214,6 +253,61 @@ export default async function OperatorFirmDetailPage({
           </CardContent>
         </Card>
       </div>
+
+      {/* ── Tokens (LiteLLM) ── */}
+      <Card>
+        <CardHeader className="flex flex-row items-start justify-between gap-4 space-y-0">
+          <div>
+            <CardTitle>Tokens (plan Todo incluido)</CardTitle>
+            <CardDescription>
+              Acceso LLM de la firma en el proxy LiteLLM. Se provisiona
+              automáticamente al parear el primer equipo de una compra BUNDLED.
+            </CardDescription>
+          </div>
+          {firm.litellmKeyId && (
+            <form action={setTokensBlockedAction}>
+              <input
+                type="hidden"
+                name="block"
+                value={firm.tokensBlocked ? "0" : "1"}
+              />
+              <Button
+                type="submit"
+                variant={firm.tokensBlocked ? "outline" : "destructive"}
+                size="sm"
+              >
+                {firm.tokensBlocked ? "Desbloquear tokens" : "Bloquear tokens"}
+              </Button>
+            </form>
+          )}
+        </CardHeader>
+        <CardContent>
+          {firm.litellmTeamId ? (
+            <div className="flex flex-wrap items-center gap-x-6 gap-y-2 text-sm">
+              <span>
+                Team{" "}
+                <code className="text-xs">TEAM-{litellmAliasFor(firm.id)}</code>
+              </span>
+              <span className="tabular-nums">
+                Gasto:{" "}
+                {tokenSpend
+                  ? `${(tokenSpend.spend ?? 0).toFixed(2)} / ${tokenSpend.maxBudget ?? "—"} USD (30d)`
+                  : "no disponible"}
+              </span>
+              {firm.tokensBlocked ? (
+                <Badge variant="destructive">bloqueados</Badge>
+              ) : (
+                <Badge variant="secondary">activos</Badge>
+              )}
+            </div>
+          ) : (
+            <p className="text-sm text-muted-foreground">
+              Sin acceso LLM provisionado (firma EXTERNAL, anterior al modelo
+              unificado, o aún sin parear).
+            </p>
+          )}
+        </CardContent>
+      </Card>
 
       <Card>
         <CardHeader className="flex flex-row items-start justify-between gap-4 space-y-0">

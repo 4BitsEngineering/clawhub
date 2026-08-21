@@ -39,22 +39,104 @@ Deno.serve(async (req: Request) => {
     return new Response(`Webhook Error: ${msg}`, { status: 400 });
   }
 
-  if (event.type === "checkout.session.completed") {
-    try {
+  try {
+    if (event.type === "checkout.session.completed") {
       await handleCheckoutCompleted(
         event.data.object as Stripe.Checkout.Session,
       );
-    } catch (err) {
-      // El fallo se registra en logs pero respondemos 200 igualmente: si el
-      // error es transitorio, Stripe reintenta; si es de datos, un 500 solo
-      // provocaría reintentos en bucle. Revisar logs de la función ante fallos.
-      const msg = err instanceof Error ? err.message : String(err);
-      console.error("[stripe-webhook] handler error:", msg);
+    } else if (event.type === "invoice.payment_failed") {
+      // Kill-switch por impago (litellm-token-provisioning)
+      await setTokensBlockedForInvoice(event.data.object as Stripe.Invoice, true);
+    } else if (event.type === "invoice.paid") {
+      await setTokensBlockedForInvoice(event.data.object as Stripe.Invoice, false);
+    } else if (event.type === "customer.subscription.deleted") {
+      await setTokensBlockedForSubscription(
+        (event.data.object as Stripe.Subscription).id,
+        true,
+      );
     }
+  } catch (err) {
+    // El fallo se registra en logs pero respondemos 200 igualmente: si el
+    // error es transitorio, Stripe reintenta; si es de datos, un 500 solo
+    // provocaría reintentos en bucle. Revisar logs de la función ante fallos.
+    const msg = err instanceof Error ? err.message : String(err);
+    console.error("[stripe-webhook] handler error:", msg);
   }
 
   return new Response("ok", { status: 200 });
 });
+
+// ── Kill-switch de tokens (litellm-token-provisioning) ─────────────────────
+// invoice.payment_failed / subscription.deleted → block; invoice.paid →
+// unblock. La firma se resuelve por la suscripción de cualquiera de sus
+// compras. Sin key provisionada no hay nada que bloquear (el corte real
+// también aplica: sin key no hay servicio).
+
+async function litellmCall(path: string, body: unknown): Promise<void> {
+  const baseUrl = Deno.env.get("LITELLM_BASE_URL");
+  const adminKey = Deno.env.get("LITELLM_ADMIN_KEY");
+  if (!baseUrl || !adminKey) {
+    console.warn("[stripe-webhook] LITELLM_BASE_URL/ADMIN_KEY ausentes — omitido", path);
+    return;
+  }
+  const res = await fetch(`${baseUrl.replace(/\/$/, "")}${path}`, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${adminKey}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify(body),
+    signal: AbortSignal.timeout(15_000),
+  });
+  if (!res.ok) {
+    throw new Error(`LiteLLM ${path} → ${res.status}: ${(await res.text()).slice(0, 200)}`);
+  }
+}
+
+async function setTokensBlockedForInvoice(
+  invoice: Stripe.Invoice,
+  blocked: boolean,
+) {
+  const subId =
+    typeof invoice.subscription === "string" ? invoice.subscription : null;
+  if (!subId) return;
+  await setTokensBlockedForSubscription(subId, blocked);
+}
+
+async function setTokensBlockedForSubscription(
+  subscriptionId: string,
+  blocked: boolean,
+) {
+  const { data: purchase } = await db
+    .from("Purchase")
+    .select("firmId")
+    .or(
+      `stripeSubscriptionId.eq.${subscriptionId},stripeFeeSubscriptionId.eq.${subscriptionId}`,
+    )
+    .not("firmId", "is", null)
+    .limit(1)
+    .maybeSingle();
+  if (!purchase?.firmId) return;
+
+  const { data: firm } = await db
+    .from("Firm")
+    .select("id, litellmKeyId, tokensBlocked")
+    .eq("id", purchase.firmId)
+    .maybeSingle();
+  if (!firm?.litellmKeyId) return;
+  if (firm.tokensBlocked === blocked) return; // ya en el estado deseado
+
+  await litellmCall(blocked ? "/key/block" : "/key/unblock", {
+    key: firm.litellmKeyId,
+  });
+  await db
+    .from("Firm")
+    .update({ tokensBlocked: blocked, updatedAt: new Date().toISOString() })
+    .eq("id", firm.id);
+  console.log(
+    `[stripe-webhook] ${blocked ? "⛔ tokens bloqueados" : "✓ tokens desbloqueados"} — firma ${firm.id} (sub ${subscriptionId})`,
+  );
+}
 
 async function handleCheckoutCompleted(session: Stripe.Checkout.Session) {
   // Idempotencia: si ya existe, ignorar
@@ -444,12 +526,29 @@ async function handleCheckoutCompleted(session: Stripe.Checkout.Session) {
   }
 
   // ── Hook de tokens (litellm-token-provisioning) ──────────────────────────
-  // Punto de extensión: al cambiar los seats de una firma con team LiteLLM se
-  // actualizará su presupuesto (budget/seat × total). No-op hasta esa spec.
+  // Ampliación de seats → presupuesto del team = budget/seat × total. Si la
+  // firma aún no tiene team (p. ej. no ha pareado nunca), no hay nada que
+  // actualizar: el alta del pair ya usa el seatsPurchased vigente.
   if (isExpansion) {
-    console.log(
-      `[stripe-webhook] onSeatsChanged(${firm.id}) — pendiente litellm-token-provisioning`,
-    );
+    try {
+      const { data: f } = await db
+        .from("Firm")
+        .select("litellmTeamId, seatsPurchased")
+        .eq("id", firm.id)
+        .maybeSingle();
+      if (f?.litellmTeamId) {
+        const perSeat = Number(Deno.env.get("LITELLM_BUDGET_PER_SEAT") ?? "16");
+        await litellmCall("/team/update", {
+          team_id: f.litellmTeamId,
+          max_budget: perSeat * Math.max(1, f.seatsPurchased ?? 1),
+        });
+        console.log(
+          `[stripe-webhook] presupuesto de tokens actualizado — firma ${firm.id} (${f.seatsPurchased} seats)`,
+        );
+      }
+    } catch (err) {
+      console.error("[stripe-webhook] Error actualizando presupuesto de tokens:", err);
+    }
   }
 
   // ── Onboarding: PairingToken + email de bienvenida ───────────────────────

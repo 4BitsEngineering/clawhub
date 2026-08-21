@@ -12,9 +12,9 @@
 
 `TEAM-<firmId8>` / `KEY-<firmId8>` (8 primeros chars del uuid de la firma — únicos en la práctica y trazables; el uuid completo queda en columnas). Modelo compartido `MODEL-AIOFFICE-MINIMAX` (alta manual única); su alias vive en config (`LITELLM_MODEL_ALIAS`) para poder cambiarlo sin tocar código.
 
-### D2 — Dónde se hace el alta
+### D2 — Dónde se hace el alta (revisado en implementación)
 
-En el **webhook** (momento de la compra), reintentable vía redelivery de Stripe; y **fallback en pair**: si la firma BUNDLED no tiene key al parear, se intenta el alta antes de generar el baseline (cubre proxy caído en la compra). Ambos caminos idempotentes: si `litellmTeamId` ya existe, no se re-crea (y `/v2/team/list?team_alias=` como verificación defensiva).
+El alta vive **solo en el pair**: es el único momento donde la key se necesita en claro (inyección en el baseline), y así el cifrado existe en una sola implementación (Node). El pair reintenta en cada pareo hasta lograrlo; idempotente (`litellmTeamId` persistido, team por alias como verificación, key regenerada si quedó huérfana — los alias de key son ÚNICOS en el proxy). El webhook queda para block/unblock y actualización de presupuesto en ampliaciones.
 
 ### D3 — Cifrado de la virtual key
 

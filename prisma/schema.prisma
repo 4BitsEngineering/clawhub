@@ -113,6 +113,16 @@ model Firm {
   // CIF/NIF de facturación — lo fija la primera compra (multi-seat-purchases);
   // un mismatch en ampliaciones no lo pisa (queda en Activity para revisión).
   taxId          String?
+  // Provisión de tokens BUNDLED en el proxy LiteLLM (litellm-token-provisioning):
+  // team + virtual key por firma. La key viaja cifrada (AES-256-GCM, ver
+  // src/lib/crypto-box.ts) y se inyecta inline en el baseline al parear.
+  // litellmKeyId = hash de la key en el proxy (para /key/block|unblock).
+  litellmTeamId       String?
+  litellmKeyId        String?
+  litellmKeyEncrypted String?
+  // Espejo del estado block/unblock (kill-switch por impago) para pintar el
+  // panel sin llamar al proxy.
+  tokensBlocked       Boolean @default(false)
   status          String    @default("active")  // active | suspended
   suspendedAt     DateTime?
   suspendedReason String?

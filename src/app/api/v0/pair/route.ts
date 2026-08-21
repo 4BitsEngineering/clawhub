@@ -8,7 +8,16 @@ import {
   defaultBaselineFiles,
   DEFAULT_BASELINE_LABEL,
   DEFAULT_BASELINE_DESCRIPTION,
+  type BaselineLlm,
 } from "@/lib/default-baseline";
+import {
+  litellmConfigured,
+  findTeamByAlias,
+  createTeam,
+  provisionKey,
+  LITELLM_MODEL_ALIAS,
+} from "@/lib/litellm";
+import { encryptBox, decryptBox } from "@/lib/crypto-box";
 
 // Rate-limiting: ventana de 15 minutos, máximo 10 intentos FALLIDOS por IP.
 // Los clientes legítimos aciertan a la primera — no se ven afectados.
@@ -255,6 +264,73 @@ export async function POST(req: NextRequest) {
 // el promovido anterior (no habrá, pero por robustez) y crear files, todo en una
 // transacción; retry ante colisión de @@unique([firmId, version]) por si dos PCs
 // parean la misma firma a la vez.
+// Acceso LLM de la firma (litellm-token-provisioning). El ALTA vive aquí (no
+// en el webhook): el pair es el único momento donde la key hace falta en claro
+// para inyectarla en el baseline, y así el cifrado existe solo en Node. Los
+// reintentos son idempotentes (team por alias; key regenerada si quedó
+// huérfana). Falla en silencio → baseline MiniMax (comportamiento previo).
+async function resolveFirmLlm(
+  firmId: string,
+  tokenProvision: string | null,
+): Promise<BaselineLlm | null> {
+  if (tokenProvision !== "BUNDLED" || !litellmConfigured()) return null;
+  const baseUrl = process.env.LITELLM_BASE_URL!;
+  try {
+    const firm = await db.firm.findUnique({
+      where: { id: firmId },
+      select: {
+        litellmTeamId: true,
+        litellmKeyEncrypted: true,
+        seatsPurchased: true,
+      },
+    });
+    if (!firm) return null;
+
+    if (firm.litellmKeyEncrypted) {
+      return {
+        baseUrl,
+        model: LITELLM_MODEL_ALIAS,
+        apiKey: decryptBox(firm.litellmKeyEncrypted),
+      };
+    }
+
+    // Alta (o reanudación de un alta a medias)
+    const teamId =
+      firm.litellmTeamId ??
+      (await findTeamByAlias(firmId)) ??
+      (await createTeam(firmId, firm.seatsPurchased));
+    const { key, keyId } = await provisionKey(firmId, teamId);
+    await db.firm.update({
+      where: { id: firmId },
+      data: {
+        litellmTeamId: teamId,
+        litellmKeyId: keyId,
+        litellmKeyEncrypted: encryptBox(key),
+        tokensBlocked: false,
+      },
+    });
+    await recordActivity({
+      kind: "tokens.provisioned",
+      summary: `Acceso LLM provisionado (team + key en el proxy) al parear`,
+      firmId,
+      actor: systemActor("pair-endpoint"),
+      metadata: { team_id: teamId },
+    });
+    return { baseUrl, model: LITELLM_MODEL_ALIAS, apiKey: key };
+  } catch (err) {
+    // eslint-disable-next-line no-console
+    console.error("[pair] Error provisionando acceso LLM:", err);
+    await recordActivity({
+      kind: "tokens.provision_failed",
+      summary: `Fallo provisionando acceso LLM al parear — baseline sin key (revisar proxy)`,
+      firmId,
+      actor: systemActor("pair-endpoint"),
+      metadata: { error: String((err as Error).message).slice(0, 300) },
+    }).catch(() => {});
+    return null;
+  }
+}
+
 async function provisionDefaultBaseline(
   firmId: string,
   firmName: string,
@@ -264,9 +340,17 @@ async function provisionDefaultBaseline(
   const lastPurchase = await db.purchase.findFirst({
     where: { firmId },
     orderBy: { createdAt: "desc" },
-    select: { selectedAgents: true },
+    select: { selectedAgents: true, tokenProvision: true },
   });
-  const files = defaultBaselineFiles(firmName, lastPurchase?.selectedAgents);
+  const llm = await resolveFirmLlm(
+    firmId,
+    lastPurchase?.tokenProvision ?? null,
+  );
+  const files = defaultBaselineFiles(
+    firmName,
+    lastPurchase?.selectedAgents,
+    llm,
+  );
   const totalBytes = files.reduce((s, f) => s + f.sizeBytes, 0);
 
   for (let attempt = 0; attempt < 3; attempt++) {
