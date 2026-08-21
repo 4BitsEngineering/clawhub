@@ -127,7 +127,10 @@ export function defaultBaselineFiles(
             input: ["text"],
             cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
             contextWindow: 1000000,
-            maxTokens: 131072,
+            // LiteLLM pre-valida prompt+maxTokens contra el TPM del team: con
+            // 131072 el pre-check rechazaba SIEMPRE con 429. 32k de salida
+            // sobra y deja margen de TPM para agentes en paralelo.
+            maxTokens: 32768,
           },
         ],
       },

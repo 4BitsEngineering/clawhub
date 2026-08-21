@@ -16,7 +16,10 @@ export const LITELLM_MODEL_ALIAS =
 export const LITELLM_BUDGET_PER_SEAT = Number(
   process.env.LITELLM_BUDGET_PER_SEAT ?? "16",
 );
-const TPM = Number(process.env.LITELLM_TPM ?? "100000");
+// TPM alto: LiteLLM estima prompt+max_tokens por petición y los agentes del
+// overlay trabajan en paralelo — 100k/min provocaba 429 constantes. El gasto
+// real lo limita el presupuesto mensual del team, no el TPM.
+const TPM = Number(process.env.LITELLM_TPM ?? "500000");
 const RPM = Number(process.env.LITELLM_RPM ?? "1000");
 
 function config(): { baseUrl: string; adminKey: string } | null {
