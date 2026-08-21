@@ -100,7 +100,7 @@ const FAQ = [
   ],
   [
     "¿Dónde se instala?",
-    "En tu propio PC de trabajo (Windows). Tus datos se quedan en tu equipo; el equipo de IA trabaja para ti desde ahí.",
+    "En tu propio equipo de trabajo, Windows o Mac. Tus datos se quedan en tu equipo; el equipo de IA trabaja para ti desde ahí.",
   ],
   [
     "¿Qué incluye la cuota?",

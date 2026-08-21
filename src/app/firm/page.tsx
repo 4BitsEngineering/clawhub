@@ -216,16 +216,25 @@ export default async function FirmPortalPage({
               Descarga AI-Office<span style={{ color: YELLOW }}>.</span>
             </h2>
             <p className="text-sm leading-relaxed" style={{ color: "#4a4a42" }}>
-              Ejecuta el instalador en el PC de trabajo. Durante la instalación
-              te pedirá tu código de activación.
+              Ejecuta el instalador en el equipo de trabajo. Durante la
+              instalación te pedirá tu código de activación.
             </p>
-            <a
-              href="/api/v0/installer"
-              className="inline-block rounded-xl px-6 py-3.5 font-semibold text-sm transition-opacity hover:opacity-90"
-              style={{ backgroundColor: NAVY, color: CREAM }}
-            >
-              ⬇ Descargar para Windows
-            </a>
+            <div className="flex flex-wrap gap-3">
+              <a
+                href="/api/v0/installer?platform=windows"
+                className="inline-block rounded-xl px-6 py-3.5 font-semibold text-sm transition-opacity hover:opacity-90"
+                style={{ backgroundColor: NAVY, color: CREAM }}
+              >
+                ⬇ Para Windows
+              </a>
+              <a
+                href="/api/v0/installer?platform=darwin"
+                className="inline-block rounded-xl px-6 py-3.5 font-semibold text-sm transition-opacity hover:opacity-90 border-2"
+                style={{ borderColor: NAVY, color: NAVY_DEEP }}
+              >
+                ⬇ Para Mac
+              </a>
+            </div>
           </section>
 
           {/* ── Código de activación ── */}
