@@ -112,7 +112,16 @@ export function defaultBaselineFiles(
     // Proveedor explícito openai-compatible hacia el proxy (mismo `api` que el
     // provider ollama de la config validada). Nombre "aioffice" para no chocar
     // con el plugin bundled "litellm" del motor.
+    //
+    // CRÍTICO: fuera el proveedor minimax heredado de la plantilla — su
+    // apiKey "${MINIMAX_API_KEY}" es un secret-ref que el motor exige en el
+    // arranque, y el cliente BUNDLED no tiene esa variable: el gateway moría
+    // con "required secrets are unavailable" (visto en el Mac de Antonio;
+    // en Windows lo enmascaraba una key residual de instalaciones previas).
     base.models = base.models ?? {};
+    if (base.models.providers) delete base.models.providers.minimax;
+    const plugins = (base as { plugins?: { entries?: Record<string, unknown> } }).plugins;
+    if (plugins?.entries?.minimax) plugins.entries.minimax = { enabled: false };
     base.models.providers = {
       ...base.models.providers,
       aioffice: {
