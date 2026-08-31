@@ -23,6 +23,7 @@ import {
 import { selectionFromFormDataDb } from "@/lib/agent-catalog-db";
 import type { TokenBillingPeriod } from "@/generated/prisma/client";
 import { AgentPicker } from "@/components/agent-picker";
+import pkg from "../../package.json";
 
 export const dynamic = "force-dynamic";
 
@@ -619,7 +620,7 @@ export default async function HomePage({
           style={{ color: "rgba(245,239,228,0.6)" }}
         >
           <span>
-            <strong style={{ color: "rgba(245,239,228,0.85)" }}>AI Office</strong> · iaofi.com
+            <strong style={{ color: "rgba(245,239,228,0.85)" }}>AI Office</strong> · iaofi.com · v{pkg.version}
           </span>
           <span className="flex items-center gap-5">
             <a href="mailto:info@iaofi.com" className="underline">info@iaofi.com</a>
