@@ -17,7 +17,7 @@ import {
   periodInstallmentCents,
   fmtEuros,
 } from "@/lib/pricing";
-import { selectionFromFormData } from "@/lib/agent-catalog";
+import { selectionFromFormDataDb } from "@/lib/agent-catalog-db";
 import type { TokenBillingPeriod } from "@/generated/prisma/client";
 import { CountdownTimer } from "@/components/countdown-timer";
 import { AgentPicker } from "@/components/agent-picker";
@@ -94,7 +94,7 @@ export default async function LandingPublicPage({
       email: customerEmail,
       trackingToken: attribution,
       houseSale: false,
-      selectedAgents: selectionFromFormData(formData),
+      selectedAgents: await selectionFromFormDataDb(formData),
       seats,
       buyerTaxId,
     });

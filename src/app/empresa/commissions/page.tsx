@@ -3,7 +3,7 @@ import { revalidatePath } from "next/cache";
 import { requireEmpresa, requireOperator } from "@/lib/session";
 import { EmpresaShell } from "@/components/empresa-shell";
 import { db } from "@/lib/db";
-import { resolveTeam } from "@/lib/agent-catalog";
+import { catalogTeam, resolveTeamAgainst } from "@/lib/agent-catalog-db";
 import type { CommissionStatus } from "@/generated/prisma/client";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -252,6 +252,9 @@ export default async function EmpresaCommissionsPage({
       ])
     : [[], []];
 
+  // Catálogo vivo (BD) cargado una vez; las compras se resuelven en síncrono.
+  const agentCatalog = await catalogTeam();
+
   const filterChip = (value: string | null, label: string, count?: number) => {
     const active = statusFilter === value || (!statusFilter && value === null);
     const href = value ? `/empresa/commissions?estado=${value}` : "/empresa/commissions";
@@ -373,13 +376,13 @@ export default async function EmpresaCommissionsPage({
                           </div>
                           <div
                             className="text-[11px] text-muted-foreground mt-0.5"
-                            title={resolveTeam(p.selectedAgents)
+                            title={resolveTeamAgainst(agentCatalog, p.selectedAgents)
                               .map((a) => a.displayName)
                               .join(", ")}
                           >
                             {p.selectedAgents.length === 0
                               ? "Equipo completo"
-                              : `Equipo: ${resolveTeam(p.selectedAgents)
+                              : `Equipo: ${resolveTeamAgainst(agentCatalog, p.selectedAgents)
                                   .map((a) => a.icon)
                                   .join(" ")}`}
                           </div>

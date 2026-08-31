@@ -61,19 +61,8 @@
   "agents": {
     "defaults": {
       "model": {
-        "primary": "minimax/MiniMax-M3",
-        "fallbacks": [
-          "minimax/MiniMax-M2.7",
-          "ollama/gemma4-gpu"
-        ]
       },
       "models": {
-        "minimax/MiniMax-M3": {
-          "streaming": true
-        },
-        "minimax/MiniMax-M2.7": {
-          "streaming": false
-        }
       },
       "thinkingDefault": "off",
       "reasoningDefault": "off",
@@ -116,11 +105,6 @@
       "timeoutSeconds": 2700,
       "maxConcurrent": 6,
       "imageGenerationModel": {
-        "primary": "minimax/image-01",
-        "fallbacks": [
-          "minimax-portal/image-01"
-        ],
-        "timeoutMs": 180000
       },
       "skipBootstrap": true
     },
@@ -179,7 +163,8 @@
       "spawn-cwd-guard",
       "web-egress-guard",
       "exec-guard",
-      "asset-downloader"
+      "asset-downloader",
+      "huggingface"
     ],
     "load": {
       "paths": [
@@ -203,7 +188,6 @@
       "together",
       "deepseek",
       "github-copilot",
-      "huggingface",
       "perplexity",
       "moonshot"
     ],
@@ -238,7 +222,7 @@
         }
       },
       "n8n": {
-        "enabled": false,
+        "enabled": true,
         "config": {
           "baseUrl": ""
         }
@@ -470,143 +454,6 @@
   "models": {
     "mode": "replace",
     "providers": {
-      "ollama": {
-        "baseUrl": "http://127.0.0.1:11434/v1",
-        "apiKey": "ollama-local",
-        "api": "openai-completions",
-        "models": [
-          {
-            "id": "gemma4-gpu",
-            "name": "Gemma 4 GPU (Ollama local)",
-            "reasoning": false,
-            "input": [
-              "text",
-              "image"
-            ],
-            "cost": {
-              "input": 0,
-              "output": 0,
-              "cacheRead": 0,
-              "cacheWrite": 0
-            },
-            "contextWindow": 65536,
-            "maxTokens": 8192
-          },
-          {
-            "id": "gemma4-assistant",
-            "name": "Gemma 4 (Ollama local)",
-            "reasoning": false,
-            "input": [
-              "text",
-              "image"
-            ],
-            "cost": {
-              "input": 0,
-              "output": 0,
-              "cacheRead": 0,
-              "cacheWrite": 0
-            },
-            "contextWindow": 65536,
-            "maxTokens": 8192
-          },
-          {
-            "id": "qwen2.5-coder:7b",
-            "name": "Qwen 2.5 Coder 7B (Ollama local, tools-capable)",
-            "reasoning": false,
-            "input": [
-              "text"
-            ],
-            "cost": {
-              "input": 0,
-              "output": 0,
-              "cacheRead": 0,
-              "cacheWrite": 0
-            },
-            "contextWindow": 32768,
-            "maxTokens": 8192
-          },
-          {
-            "id": "qwen2.5-coder:14b",
-            "name": "Qwen 2.5 Coder 14B (Ollama local, tools-capable)",
-            "reasoning": false,
-            "input": [
-              "text"
-            ],
-            "cost": {
-              "input": 0,
-              "output": 0,
-              "cacheRead": 0,
-              "cacheWrite": 0
-            },
-            "contextWindow": 32768,
-            "maxTokens": 8192
-          },
-          {
-            "id": "minimax-m2:cloud",
-            "name": "MiniMax M2 (Ollama cloud, tool_calls native)",
-            "reasoning": true,
-            "input": [
-              "text"
-            ],
-            "cost": {
-              "input": 0,
-              "output": 0,
-              "cacheRead": 0,
-              "cacheWrite": 0
-            },
-            "contextWindow": 200000,
-            "maxTokens": 32000
-          }
-        ]
-      },
-      "minimax": {
-        "baseUrl": "https://api.minimax.io/anthropic",
-        "apiKey": "${MINIMAX_API_KEY}",
-        "api": "anthropic-messages",
-        "models": [
-          {
-            "id": "MiniMax-M3",
-            "name": "MiniMax M3",
-            "reasoning": true,
-            "compat": {
-              "supportsPromptCacheKey": true
-            },
-            "input": [
-              "text",
-              "image"
-            ],
-            "cost": {
-              "input": 0,
-              "output": 0,
-              "cacheRead": 0,
-              "cacheWrite": 0
-            },
-            "contextWindow": 1000000,
-            "maxTokens": 131072
-          },
-          {
-            "id": "MiniMax-M2.7",
-            "name": "MiniMax M2.7",
-            "reasoning": true,
-            "compat": {
-              "supportsPromptCacheKey": true
-            },
-            "input": [
-              "text",
-              "image"
-            ],
-            "cost": {
-              "input": 0,
-              "output": 0,
-              "cacheRead": 0,
-              "cacheWrite": 0
-            },
-            "contextWindow": 1000000,
-            "maxTokens": 131072
-          }
-        ],
-        "timeoutSeconds": 300
-      }
     }
   },
   "meta": {

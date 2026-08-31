@@ -16,7 +16,7 @@ import {
   bundledAnnualTotalCents,
   periodInstallmentCents,
 } from "@/lib/pricing";
-import { sanitizeSelection } from "@/lib/agent-catalog";
+import { sanitizeSelectionDb } from "@/lib/agent-catalog-db";
 import type { TokenBillingPeriod } from "@/generated/prisma/client";
 
 export type UnifiedCheckoutInput = {
@@ -123,8 +123,9 @@ export async function createUnifiedCheckout(
       tokenBillingPeriod: period ?? "",
       tokenAmountCents: tokenAnnualCents != null ? String(tokenAnnualCents) : "",
       houseSale: input.houseSale ? "1" : "",
-      // ids con coma (~130 chars con los 14; límite Stripe 500). "" = todos.
-      selectedAgents: sanitizeSelection(input.selectedAgents ?? []).join(","),
+      // agentKeys con coma (límite Stripe 500 chars). "" = todos. Saneado
+      // contra el catálogo vivo de la BD (AgentCatalogEntry).
+      selectedAgents: (await sanitizeSelectionDb(input.selectedAgents ?? [])).join(","),
       seats: String(clampSeats(input.seats ?? 1)),
       buyerTaxId: input.buyerTaxId ?? "",
       // Ampliación sobre firma existente (botón "Ampliar equipos" de /firm).

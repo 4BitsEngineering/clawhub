@@ -5,7 +5,7 @@
 import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 import { db } from "@/lib/db";
-import { resolveTeam } from "@/lib/agent-catalog";
+import { resolveCatalogTeam } from "@/lib/agent-catalog-db";
 import { stripe } from "@/lib/stripe";
 import { createUnifiedCheckout, clampSeats, MAX_SEATS } from "@/lib/checkout";
 import { generatePairingCode } from "@/lib/tokens";
@@ -70,15 +70,22 @@ export default async function FirmPortalPage({
     const fid = s.user.firmId;
     const seats = clampSeats(formData.get("seats"));
 
-    // La ampliación hereda modalidad y periodo de la última compra; el firmId
-    // en metadata hace que el webhook sume seats en vez de crear firma nueva.
+    // La ampliación hereda modalidad, periodo Y selección de agentes de la
+    // última compra; el firmId en metadata hace que el webhook sume seats en
+    // vez de crear firma nueva. Sin heredar selectedAgents, la Purchase nueva
+    // quedaba con [] (= catálogo completo) y, como el pair usa la ÚLTIMA
+    // compra, la ampliación borraba el equipo elegido en la compra original.
     // Sin comisión de captación (houseSale + sin tracking).
     const [firm, last] = await Promise.all([
       db.firm.findUnique({ where: { id: fid }, select: { taxId: true } }),
       db.purchase.findFirst({
         where: { firmId: fid, status: "COMPLETED" },
         orderBy: { completedAt: "desc" },
-        select: { tokenProvision: true, tokenBillingPeriod: true },
+        select: {
+          tokenProvision: true,
+          tokenBillingPeriod: true,
+          selectedAgents: true,
+        },
       }),
     ]);
     if (!last) redirect("/firm?expand=err");
@@ -90,6 +97,7 @@ export default async function FirmPortalPage({
       email: s.user.email ?? "",
       trackingToken: null,
       houseSale: true,
+      selectedAgents: last.selectedAgents,
       seats,
       buyerTaxId: firm?.taxId ?? undefined,
       firmId: fid,
@@ -179,6 +187,10 @@ export default async function FirmPortalPage({
     ]);
 
   if (!firm) redirect("/login");
+
+  // Equipo contratado, resuelto contra el catálogo vivo de la BD
+  // (AgentCatalogEntry); acepta agentKeys nuevas e ids legacy de compras viejas.
+  const contractedTeam = await resolveCatalogTeam(purchase?.selectedAgents);
 
   const tokensMonth =
     (usageMonth._sum.inputTokens ?? 0) + (usageMonth._sum.outputTokens ?? 0);
@@ -418,7 +430,7 @@ export default async function FirmPortalPage({
             Especialistas incluidos<span style={{ color: YELLOW }}>.</span>
           </h2>
           <div className="flex flex-wrap gap-2">
-            {resolveTeam(purchase?.selectedAgents).map((a) => (
+            {contractedTeam.map((a) => (
               <span
                 key={a.agent}
                 className="inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-sm font-medium"

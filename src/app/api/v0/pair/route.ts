@@ -362,7 +362,12 @@ async function refreshDefaultBaseline(
     select: { selectedAgents: true, tokenProvision: true },
   });
   const llm = await resolveFirmLlm(firmId, lastPurchase?.tokenProvision ?? null);
-  const files = defaultBaselineFiles(firmName, lastPurchase?.selectedAgents, llm);
+  const files = await defaultBaselineFiles(
+    firmId,
+    firmName,
+    lastPurchase?.selectedAgents,
+    llm,
+  );
   const totalBytes = files.reduce((s, f) => s + f.sizeBytes, 0);
   await db.$transaction(async (tx) => {
     await tx.firmBaselineFile.deleteMany({ where: { baselineId } });
@@ -399,7 +404,8 @@ async function provisionDefaultBaseline(
     firmId,
     lastPurchase?.tokenProvision ?? null,
   );
-  const files = defaultBaselineFiles(
+  const files = await defaultBaselineFiles(
+    firmId,
     firmName,
     lastPurchase?.selectedAgents,
     llm,

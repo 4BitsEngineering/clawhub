@@ -3,9 +3,14 @@
 // checkbox oculto (sr-only) y el estado pintado por CSS (:has(:checked)):
 // apagada sobre el navy cuando está fuera, crema con borde amarillo y tic
 // cuando está dentro. Los MANDATORY (planner) van fijos con un hidden (los
-// inputs disabled no se envían). El server action lee los campos agent_<id>
-// con selectionFromFormData (agent-catalog.ts).
-import { AGENT_CATALOG, MANDATORY_AGENTS } from "@/lib/agent-catalog";
+// inputs disabled no se envían). El server action lee los campos
+// agent_<agentKey> con selectionFromFormDataDb (agent-catalog-db.ts).
+//
+// El catálogo sale de la BD (AgentCatalogEntry, agentKeys reales de clawcrew)
+// vía catalogTeam(): la oferta de la landing y lo que el baseline puede
+// materializar son siempre la misma lista.
+import { MANDATORY_AGENTS } from "@/lib/agent-catalog";
+import { catalogTeam } from "@/lib/agent-catalog-db";
 
 const CREAM = "#f5efe4";
 const NAVY_DEEP = "#082130";
@@ -22,11 +27,12 @@ function CheckBubble() {
   );
 }
 
-export function AgentPicker() {
+export async function AgentPicker() {
+  const catalog = await catalogTeam();
   const mandatory = new Set<string>(MANDATORY_AGENTS);
   return (
     <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3">
-      {AGENT_CATALOG.map((a) => {
+      {catalog.map((a) => {
         const locked = mandatory.has(a.agent);
         if (locked) {
           return (
