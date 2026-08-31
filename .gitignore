@@ -67,3 +67,5 @@ logs/
 
 # Documentación LiteLLM con credenciales — nunca commitear
 doc-litellm/
+
+.vercel
