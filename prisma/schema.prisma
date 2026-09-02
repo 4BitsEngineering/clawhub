@@ -1108,3 +1108,21 @@ enum CommissionStatus {
   TRANSFERRED
   INCIDENT
 }
+
+/**
+ * ExternalTools — herramientas externas (binarios de terceros) que el
+ * instalador de escritorio descarga durante la instalación, resueltas por
+ * nombre para poder cambiar el enlace sin recompilar el instalador.
+ *
+ * Primer uso: `HIMALAYA` (CLI de correo IMAP, himalaya.exe 1.x) que el paso de
+ * Node.js del instalador deja en `node24\`. `enlace` es SIEMPRE una URL
+ * absoluta `https://...` (p. ej. enlace firmado del bucket `bundles`).
+ *
+ * Lo consume GET /api/v0/external-tools?nombre=... (Bearer instance_token).
+ */
+model ExternalTools {
+  id        BigInt   @id @default(autoincrement())
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  nombre    String   @db.VarChar // "HIMALAYA"
+  enlace    String   @db.Text // URL absoluta https://...
+}
