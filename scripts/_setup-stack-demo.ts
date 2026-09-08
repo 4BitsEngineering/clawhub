@@ -5,7 +5,7 @@
  */
 
 async function main() {
-  const baseUrl = process.env.CLAWHUB_URL ?? "https://clawhub-three.vercel.app";
+  const baseUrl = process.env.CLAWHUB_URL ?? "https://ia-suite-chi.vercel.app";
   const code = process.argv[2] ?? "STACK-DEMO";
 
   const pairResp = await fetch(`${baseUrl}/api/v0/pair`, {

@@ -13,7 +13,7 @@ const { ensureStack } = require('./stack-bootstrap');
 /**
  * env shape (proporcionado por el cliente):
  *   {
- *     clawhubUrl:    'https://clawhub-three.vercel.app',
+ *     clawhubUrl:    'https://ia-suite-chi.vercel.app',
  *     bridgeUrl:     'http://localhost:3700' | null,
  *     clientVersion: '0.1.0-headless' | '0.1.0-desktop',
  *     workerLabel:   'Carlos García',

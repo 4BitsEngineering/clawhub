@@ -18,7 +18,7 @@ Cada repo necesita 2 secrets en GitHub Settings → Secrets and variables → Ac
 
 | Secret                | Qué es                                                       |
 | --------------------- | ------------------------------------------------------------ |
-| `CLAWHUB_URL`         | URL del control plane, ej. `https://clawhub-three.vercel.app` |
+| `CLAWHUB_URL`         | URL del control plane, ej. `https://ia-suite-chi.vercel.app` |
 | `CLAWHUB_API_KEY`     | Valor de `OPERATOR_API_KEY` en clawhub (env var Vercel)      |
 
 Genera la API key con `openssl rand -hex 32` y configúrala en ambos lados.
