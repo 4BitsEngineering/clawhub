@@ -15,6 +15,7 @@ declare module "next-auth" {
       image?: string | null;
       role: "OPERATOR" | "FIRM_ADMIN" | "EMPRESA" | "COMERCIAL";
       firmId?: string | null;
+      suiteId?: string | null;
     };
   }
 }
@@ -46,6 +47,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
           name: user.name,
           role: user.role,
           firmId: user.firmId,
+          suiteId: user.suiteId,
         };
       },
     }),
@@ -128,10 +130,12 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
     jwt({ token, user }) {
       if (user) {
         token.id = user.id;
-        // @ts-expect-error — role/firmId vienen del User de Prisma
+        // @ts-expect-error — role/firmId/suiteId vienen del User de Prisma
         token.role = user.role;
-        // @ts-expect-error — role/firmId vienen del User de Prisma
+        // @ts-expect-error — role/firmId/suiteId vienen del User de Prisma
         token.firmId = user.firmId ?? null;
+        // @ts-expect-error — role/firmId/suiteId vienen del User de Prisma
+        token.suiteId = user.suiteId ?? null;
       }
       return token;
     },
@@ -144,6 +148,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
           | "EMPRESA"
           | "COMERCIAL";
         session.user.firmId = (token.firmId as string | null) ?? null;
+        session.user.suiteId = (token.suiteId as string | null) ?? null;
       }
       return session;
     },

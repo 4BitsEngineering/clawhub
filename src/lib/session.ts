@@ -23,6 +23,7 @@ export type SessionUser = {
   name?: string | null;
   role: "OPERATOR" | "FIRM_ADMIN" | "EMPRESA" | "COMERCIAL";
   firmId?: string | null;
+  suiteId?: string | null;
 };
 
 export type Session = { user: SessionUser };
@@ -41,6 +42,7 @@ export async function getSession(): Promise<Session | null> {
             name: user.name,
             role: user.role,
             firmId: user.firmId,
+            suiteId: user.suiteId,
           },
         };
       }
@@ -89,4 +91,28 @@ export async function requireSalesRep(): Promise<Session> {
   if (!s) redirect("/login");
   if (s.user.role !== "COMERCIAL") redirect(homeForRole(s.user.role));
   return s;
+}
+
+// Usuario de Suite (change suites-and-zones): COMERCIAL con suiteId. Resuelve el
+// suiteId de forma fiable desde la sesión; si por lo que sea no viene en el
+// token (sesión antigua), lo relee de la BD. Devuelve la sesión con suiteId
+// garantizado no-nulo.
+export async function requireSuiteUser(): Promise<
+  Session & { user: SessionUser & { suiteId: string } }
+> {
+  const s = await getSession();
+  if (!s) redirect("/login");
+  if (s.user.role !== "COMERCIAL") redirect(homeForRole(s.user.role));
+  let suiteId = s.user.suiteId ?? null;
+  if (!suiteId) {
+    const u = await db.user.findUnique({
+      where: { id: s.user.id },
+      select: { suiteId: true },
+    });
+    suiteId = u?.suiteId ?? null;
+  }
+  if (!suiteId) redirect("/sales"); // comercial aún sin Suite asignada
+  return {
+    user: { ...s.user, suiteId },
+  } as Session & { user: SessionUser & { suiteId: string } };
 }

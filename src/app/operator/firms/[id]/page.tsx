@@ -53,10 +53,41 @@ export default async function OperatorFirmDetailPage({
         where: { usedAt: null, expiresAt: { gt: new Date() } },
         orderBy: { createdAt: "desc" },
       },
+      suite: { select: { id: true, name: true } },
     },
   });
 
   if (!firm) notFound();
+
+  // Promoción cliente → Suite (change suites-and-zones). Crea la Suite de la
+  // firma (si no la tiene), le da a su FIRM_ADMIN acceso de Suite (suiteId) y
+  // marca Firm.suiteId. Idempotente.
+  async function promoteToSuiteAction() {
+    "use server";
+    await requireOperator();
+    const f = await db.firm.findUnique({
+      where: { id },
+      select: { id: true, name: true, taxId: true, suiteId: true },
+    });
+    if (!f || f.suiteId) return; // ya promovida
+    const suite = await db.suite.create({
+      data: { name: f.name, type: "EMPRESA", billingTaxId: f.taxId },
+    });
+    await db.firm.update({ where: { id }, data: { suiteId: suite.id } });
+    // El FIRM_ADMIN gana acceso de Suite; conserva su rol de cliente.
+    await db.user.updateMany({
+      where: { firmId: id, role: "FIRM_ADMIN" },
+      data: { suiteId: suite.id },
+    });
+    await recordActivity({
+      kind: "firm.promoted_to_suite",
+      summary: `Firma "${f.name}" convertida en Suite`,
+      firmId: id,
+      actor: systemActor("operator-panel"),
+      metadata: { suite_id: suite.id },
+    });
+    revalidatePath(`/operator/firms/${id}`);
+  }
 
   // Gasto/presupuesto del team de tokens — best-effort: el panel no se cae si
   // el proxy no responde.
@@ -194,6 +225,17 @@ export default async function OperatorFirmDetailPage({
             heartbeat cascadea instance_status:"disabled" a sus instancias y el
             bridge corta el acceso (403). Reactivar lo revierte. */}
         <div className="flex items-center justify-end gap-2 flex-wrap">
+          {firm.suite ? (
+            <Badge variant="secondary" className="text-sm">
+              Suite: {firm.suite.name}
+            </Badge>
+          ) : (
+            <form action={promoteToSuiteAction}>
+              <Button type="submit" variant="outline" size="sm">
+                Convertir en Suite
+              </Button>
+            </form>
+          )}
           {firmSuspended && (
             <Badge variant="destructive" className="text-sm">
               suspendida
