@@ -27,6 +27,10 @@ model User {
   role          UserRole  @default(FIRM_ADMIN)
   firmId        String?
   firm          Firm?     @relation(fields: [firmId], references: [id], onDelete: SetNull)
+  // Usuario de Suite (change suites-and-zones): un usuario COMERCIAL vinculado a
+  // su oficina. Coexiste con firmId (un cliente promovido a Suite tiene ambos).
+  suiteId       String?
+  suite         Suite?    @relation(fields: [suiteId], references: [id], onDelete: SetNull)
   createdAt     DateTime  @default(now())
   updatedAt     DateTime  @updatedAt
 
@@ -36,6 +40,7 @@ model User {
   setupTokens AccountSetupToken[]
 
   @@index([firmId])
+  @@index([suiteId])
 }
 
 /**
@@ -126,6 +131,10 @@ model Firm {
   status          String    @default("active")  // active | suspended
   suspendedAt     DateTime?
   suspendedReason String?
+  // Suite a la que pertenece/queda asociada la firma (change suites-and-zones):
+  // lo consume clientes-crm; aquí lo usa la promoción cliente→Suite.
+  suiteId         String?
+  suite           Suite?    @relation(fields: [suiteId], references: [id], onDelete: SetNull)
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt
 
@@ -828,6 +837,60 @@ enum SalesRepStatus {
   SUSPENDED
 }
 
+// ============================================
+// Suites & Zonas (change suites-and-zones) — pivote a multi-tenant.
+// Entrega ADITIVA: Zone/Suite conviven con SalesRep; los suiteId se añaden
+// junto a los salesRepId existentes (backfill), sin romper lecturas actuales.
+// La eliminación de SalesRep y el switch de lecturas es una entrega posterior.
+// ============================================
+
+enum SuiteType {
+  ASESORIA
+  ASOCIACION
+  EMPRESA
+  OTRO
+}
+
+// Agrupación de Suites (formaliza el antiguo SalesRep.territory).
+model Zone {
+  id        String   @id @default(uuid())
+  name      String   @unique
+  createdAt DateTime @default(now())
+
+  suites Suite[]
+}
+
+// Oficina/tenant: gestiona su cartera de clientes y campañas bajo su marca.
+// Generaliza al comercial: la comisión y el IBAN de cobro viven aquí (no en la
+// persona). `name` es la marca (remitente de campañas, spec campaigns-branding).
+model Suite {
+  id             String    @id @default(uuid())
+  zoneId         String?
+  zone           Zone?     @relation(fields: [zoneId], references: [id], onDelete: SetNull)
+  name           String
+  type           SuiteType @default(EMPRESA)
+  // Obligatorio a nivel de aplicación (no en DB, para no romper la migración de
+  // reps sin teléfono; se exige al guardar el perfil).
+  phone          String?
+  commissionRate Float     @default(0.35)
+  iban           String?
+  ibanHolder     String?
+  // Datos de facturación de la Suite.
+  billingTaxId      String?
+  billingAddress    String?
+  billingPostalCode String?
+  billingCity       String?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  users       User[]
+  prospects   Prospect[]
+  commissions Commission[]
+  firms       Firm[]
+
+  @@index([zoneId])
+}
+
 /**
  * Prospect — empresa potencial que un comercial (o la empresa) quiere convertir.
  * salesRepId=null → prospect propio de la empresa (rol EMPRESA).
@@ -837,6 +900,11 @@ model Prospect {
   id              String        @id @default(uuid())
   salesRepId      String?
   salesRep        SalesRep?     @relation(fields: [salesRepId], references: [id], onDelete: SetNull)
+  // Suite a la que cuelga el prospect (change suites-and-zones). Aditivo:
+  // backfill desde salesRepId; el rename Prospect→Cliente lo consolida en
+  // clientes-crm. Cuando se lea de aquí, salesRepId queda como sombra.
+  suiteId         String?
+  suite           Suite?        @relation(fields: [suiteId], references: [id], onDelete: SetNull)
   createdById     String        // User.id del creador (no FK para no acoplar)
   cif             String?
   name            String
@@ -853,6 +921,7 @@ model Prospect {
   purchases Purchase[]
 
   @@index([salesRepId])
+  @@index([suiteId])
   @@index([createdById])
   @@index([status])
   @@index([email])
@@ -1087,6 +1156,10 @@ model Commission {
   purchase    Purchase         @relation(fields: [purchaseId], references: [id], onDelete: Restrict)
   salesRepId  String
   salesRep    SalesRep         @relation(fields: [salesRepId], references: [id], onDelete: Restrict)
+  // Suite acreedora de la comisión (change suites-and-zones). Aditivo: backfill
+  // desde salesRepId; cuando el pago lea de aquí, salesRepId queda como sombra.
+  suiteId     String?
+  suite       Suite?           @relation(fields: [suiteId], references: [id], onDelete: SetNull)
   rate        Float
   amountCents Int
   // Ciclo de pago por transferencia bancaria manual:
@@ -1101,6 +1174,7 @@ model Commission {
   createdAt   DateTime         @default(now())
 
   @@index([salesRepId, status])
+  @@index([suiteId, status])
 }
 
 enum CommissionStatus {
