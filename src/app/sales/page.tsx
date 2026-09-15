@@ -69,16 +69,20 @@ export default async function SalesPage() {
     if (!salesRep) return;
     const name = ((formData.get("name") as string) ?? "").trim();
     const email = ((formData.get("email") as string) ?? "").trim().toLowerCase();
-    if (!name || !email) return;
+    const phone = ((formData.get("phone") as string) ?? "").trim();
+    // Teléfono obligatorio (change clientes-crm).
+    if (!name || !email || !phone) return;
     await db.prospect.create({
       data: {
         name,
         email,
         cif: ((formData.get("cif") as string) ?? "").trim() || null,
-        phone: ((formData.get("phone") as string) ?? "").trim() || null,
+        phone,
         contactName: ((formData.get("contactName") as string) ?? "").trim() || null,
         notes: ((formData.get("notes") as string) ?? "").trim() || null,
         salesRepId: salesRep.id,
+        // El cliente cuelga de la Suite del comercial (change clientes-crm).
+        suiteId: s.user.suiteId ?? null,
         createdById: s.user.id,
       },
     });
@@ -219,7 +223,7 @@ export default async function SalesPage() {
               Panel comercial
             </p>
             <h1 className="font-display text-3xl font-bold tracking-tight">
-              Pipeline de ventas
+              Clientes y pipeline
             </h1>
           </div>
           {pendingCommCents > 0 && (
@@ -267,9 +271,17 @@ export default async function SalesPage() {
               <span className="inline-flex h-7 w-7 rounded-full items-center justify-center text-white text-base font-bold bg-emerald-600 dark:bg-emerald-700 shrink-0 leading-none">
                 +
               </span>
-              <span className="font-semibold text-sm">Añadir nuevo prospect</span>
+              <span className="font-semibold text-sm">Añadir cliente</span>
             </span>
-            <span className="text-muted-foreground text-xs font-mono">▾</span>
+            <span className="flex items-center gap-3">
+              <Link
+                href="/sales/import"
+                className="text-xs font-semibold text-emerald-700 dark:text-emerald-400 hover:underline"
+              >
+                ⬆ Importar desde Excel
+              </Link>
+              <span className="text-muted-foreground text-xs font-mono">▾</span>
+            </span>
           </summary>
           <div className="px-6 pb-6 pt-1 border-t border-border">
             <form
@@ -289,8 +301,8 @@ export default async function SalesPage() {
                 <Input id="p-cif" name="cif" placeholder="B12345678" />
               </div>
               <div className="space-y-2">
-                <Label htmlFor="p-phone" className="text-xs">Teléfono</Label>
-                <Input id="p-phone" name="phone" placeholder="600 000 000" />
+                <Label htmlFor="p-phone" className="text-xs">Teléfono *</Label>
+                <Input id="p-phone" name="phone" required placeholder="600 000 000" />
               </div>
               <div className="space-y-2">
                 <Label htmlFor="p-contact" className="text-xs">Persona de contacto</Label>
